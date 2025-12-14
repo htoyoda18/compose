@@ -1,0 +1,22 @@
+- desktop
+  - Docker Desktop 統合
+    - Docker Desktop アプリケーションとの通信・連携機能
+- experimental
+  - 実験的機能の管理
+- locker
+  - ロック機構
+    - 複数の Compose プロセスが同時実行されないように制御
+- memnet
+  - メモリ内ネットワーク
+- oci
+  - Open Container Initiative関連
+- paths
+  - パス処理ユーティリティ
+- registry
+  - コンテナレジストリ関連
+- sync
+  - ファイル同期機能
+- tracing
+  - 分散トレーシング機能
+- variables.go
+  - バージョン情報の管理
