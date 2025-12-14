@@ -1,0 +1,29 @@
+- ルートファイル
+- pluginMain
+  - Docker CLI プラグインとして動作するメイン処理
+  - backendOptions
+    - バックエンドオプション設定
+  - RootCommand
+    - ルートコマンド作成
+  - PreRunE
+    - 全サブコマンド実行前に必ず実行されるフック
+  - SetFlagErrorFunc
+    - エラーハンドリング設定
+  - Metadata
+    - メタデータ設定
+- main
+  - プログラムのエントリーポイント
+  - プラグインモード
+    - Docker CLI から呼び出される
+  - スタンドアロンモード
+    - 互換性のため
+- 全体の流れ
+  - main() 実行
+  - 実行モード判定
+  - 必要に応じてコマンド引数を変換
+  - pluginMain() 呼び出し
+  - RootCommand作成
+  - 各サブコマンド登録
+    - up, down, build
+  - PreRunE フック実行
+  - 実際のコマンド実行

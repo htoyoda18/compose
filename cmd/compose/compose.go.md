@@ -1,0 +1,24 @@
+- 環境変数名の定義
+- AdaptCmd
+  - シグナルハンドリング
+  - Ctrl+Cで安全に停止できる仕組み
+- ProjectOptions 構造体
+  - メソッド
+    - ToProject
+      - プロジェクトのロード
+      - docker-compose.yamlをパースしてProjectオブジェクトに変換
+    - WithServices
+      - サービス選択付き実行
+  - RootCommand
+    - 全コマンドを登録する
+  - PersistentPreRunE
+    - 全コマンド実行前に実行される重要な前処理
+- 実行フロー
+  - main.go から RootCommand() 呼び出し
+  - RootCommand で cobra.Command 作成
+  - 27個のサブコマンド登録
+  - ユーザーがコマンド実行
+  - PersistentPreRunE 実行
+  - 該当サブコマンド実行
+  - WithServices でプロジェクトロード
+  - 実際の処理（pkg/compose/up.go）

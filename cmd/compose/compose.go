@@ -672,6 +672,7 @@ func stdinfo(dockerCli command.Cli) io.Writer {
 	return dockerCli.Err()
 }
 
+// 以下でエラーハンドリング漏れている
 func setEnvWithDotEnv(opts ProjectOptions) error {
 	options, err := cli.NewProjectOptions(opts.ConfigPaths,
 		cli.WithWorkingDirectory(opts.ProjectDir),
