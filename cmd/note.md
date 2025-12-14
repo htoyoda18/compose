@@ -1,0 +1,14 @@
+- cmdtrace
+  - コマンド実行のトレース機能
+- compatibility
+  - 旧バージョンとの互換性維持
+- compose
+  - Docker Compose の全コマンド実装
+- display
+  - 表示モード管理
+- formatter
+  - 出力フォーマット処理
+- prompt
+  - ユーザー確認プロンプト
+- main.go
+  - プログラムのエントリーポイント
