@@ -1,0 +1,18 @@
+- api
+  - Docker Compose API の公開インターフェース
+- bridge
+  - docker-compose v1 → v2 変換
+- compose
+  - Docker Compose のコア実装
+- dryrun
+  - ドライラン機能 - 実行シミュレーション
+- e2e
+  - End-to-Endテスト
+- mocks
+  - テスト用モック
+- remote
+  - リモート実行機能
+- utils
+  - ユーティリティ関数集
+- watch
+  - ファイル監視機能
