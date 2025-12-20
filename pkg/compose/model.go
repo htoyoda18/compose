@@ -29,7 +29,7 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/containerd/errdefs"
 	"github.com/docker/cli/cli-plugins/manager"
-	"github.com/sirupsen/logrus"
+	"github.com/docker/docker/api/types/versions"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
@@ -75,6 +75,7 @@ type modelAPI struct {
 	env     []string
 	prepare func(ctx context.Context, cmd *exec.Cmd) error
 	cleanup func()
+	version string
 }
 
 func (s *composeService) newModelAPI(project *types.Project) (*modelAPI, error) {
@@ -85,12 +86,16 @@ func (s *composeService) newModelAPI(project *types.Project) (*modelAPI, error) 
 		}
 		return nil, err
 	}
+	if dockerModel.Err != nil {
+		return nil, fmt.Errorf("failed to load Docker Model plugin: %w", dockerModel.Err)
+	}
 	endpoint, cleanup, err := s.propagateDockerEndpoint()
 	if err != nil {
 		return nil, err
 	}
 	return &modelAPI{
-		path: dockerModel.Path,
+		path:    dockerModel.Path,
+		version: dockerModel.Version,
 		prepare: func(ctx context.Context, cmd *exec.Cmd) error {
 			return s.prepareShellOut(ctx, project.Environment, cmd)
 		},
@@ -107,7 +112,7 @@ func (m *modelAPI) PullModel(ctx context.Context, model types.ModelConfig, quiet
 	events.On(api.Resource{
 		ID:     model.Name,
 		Status: api.Working,
-		Text:   "Pulling",
+		Text:   api.StatusPulling,
 	})
 
 	cmd := exec.CommandContext(ctx, m.path, "pull", model.Model)
@@ -154,27 +159,38 @@ func (m *modelAPI) PullModel(ctx context.Context, model types.ModelConfig, quiet
 }
 
 func (m *modelAPI) ConfigureModel(ctx context.Context, config types.ModelConfig, events api.EventProcessor) error {
-	if len(config.RuntimeFlags) != 0 {
-		logrus.Warnf("Runtime flags are not supported and will be ignored for model %s", config.Model)
-		config.RuntimeFlags = nil
-	}
 	events.On(api.Resource{
 		ID:     config.Name,
 		Status: api.Working,
-		Text:   "Configuring",
+		Text:   api.StatusConfiguring,
 	})
-	// configure [--context-size=<n>] MODEL
+	// configure [--context-size=<n>] MODEL [-- <runtime-flags...>]
 	args := []string{"configure"}
 	if config.ContextSize > 0 {
 		args = append(args, "--context-size", strconv.Itoa(config.ContextSize))
 	}
 	args = append(args, config.Model)
+	// Only append RuntimeFlags if docker model CLI version is >= v1.0.6
+	if len(config.RuntimeFlags) != 0 && m.supportsRuntimeFlags() {
+		args = append(args, "--")
+		args = append(args, config.RuntimeFlags...)
+	}
 	cmd := exec.CommandContext(ctx, m.path, args...)
 	err := m.prepare(ctx, cmd)
 	if err != nil {
 		return err
 	}
-	return cmd.Run()
+	err = cmd.Run()
+	if err != nil {
+		events.On(errorEvent(config.Name, err.Error()))
+		return err
+	}
+	events.On(api.Resource{
+		ID:     config.Name,
+		Status: api.Done,
+		Text:   api.StatusConfigured,
+	})
+	return nil
 }
 
 func (m *modelAPI) SetModelVariables(ctx context.Context, project *types.Project) error {
@@ -262,4 +278,17 @@ func (m *modelAPI) ListModels(ctx context.Context) ([]string, error) {
 		availableModels = append(availableModels, model.Tags...)
 	}
 	return availableModels, nil
+}
+
+// supportsRuntimeFlags checks if the docker model version supports runtime flags
+// Runtime flags are supported in version >= v1.0.6
+func (m *modelAPI) supportsRuntimeFlags() bool {
+	// If version is not cached, don't append runtime flags to be safe
+	if m.version == "" {
+		return false
+	}
+
+	// Strip 'v' prefix if present (e.g., "v1.0.6" -> "1.0.6")
+	versionStr := strings.TrimPrefix(m.version, "v")
+	return !versions.LessThan(versionStr, "1.0.6")
 }
