@@ -1,0 +1,22 @@
+- composeOptions
+  - Compose プロジェクトを扱うためのオプション
+- apply
+  - --no-deps のとき、対象サービスだけに絞って依存を無視する形にプロジェクトを変換
+  - --exit-code-from SERVICE のとき、その SERVICE が存在するか検証
+- validateNavigationMenu
+  - --menu と COMPOSE_MENU と「端末かどうか」の優先順位、opts.navigationMenu を確定
+  - 出力先がターミナルでないならメニュー無効
+  - --menu が明示指定されていない場合のみ、環境変数を見る
+- OnExit
+  - cascade オプションを API の定数へ変換
+- upCommand
+  - cobra コマンド定義
+  - flags.BoolVar
+    - 各フィールドに結び付け
+- validateFlags
+  - 相互排他・副作用の調整
+  - 「CLI フラグの整合性」を担保
+- runUp
+  - 実際に create/build/up を組み立てて backend に依頼
+- setServiceScale
+  - Compose プロジェクト内の特定 service のスケールを更新する
