@@ -1,0 +1,74 @@
+- 責務
+  - docker compose プロジェクトのイメージビルドを担当する
+  - サービスイメージのビルド
+  - イメージの存在確認と準備
+  - ビルド依存関係の解決
+  - ビルド引数とラベルの管理
+  - ビルド戦略の選択
+- 全体の大まかな処理フロー
+  - Build()
+    - エントリーポイント
+    - オプションをプロジェクトに適用
+    - トレーシングでラップして実行
+  - build()
+    - メインビルドロジック
+    - サービス選択と依存関係解決
+      - ビルド対象サービスの決定
+      - additional_contexts の追跡
+    - ビルド不要サービスのフィルタ
+      - build: がないサービスをスキップ
+      - ローカルイメージ存在確認
+    - ビルド方式の選択
+      - BuildKit Bake or Classic
+- 詳細の処理
+  - Build: エントリーポイント
+    - options.Apply
+      - ビルドオプションをプロジェクトに適用
+    - Run
+      - イベント発行のラッパー
+    - tracing.SpanWrapFunc
+      - トレーシング
+    - s.build
+      - 実際のビルドロジック
+  - build: メインビルドロジック
+    - 初期化
+      - imageIDs
+        - ビルドされたイメージのIDを格納
+      - serviceToBuild
+        - 実際にビルドするサービスのリスト
+      - policy
+        - 依存関係を含めるか決定
+    - ビルド対象サービスの決定
+      - options.Services = project.ServiceNames()
+        - 指定なしなら全サービス
+      - addBuildDependencies
+        - additional_contextsで参照されているサービスもビルド対象に追加
+    - ビルドが必要なサービスのフィルタリング
+      - フィルタリング条件
+        - service.Build == nil → スキップ
+        - ローカルにイメージがあり、pull_policy: buildでない → スキップ
+    - ビルド方式の選択
+      - BuildKit Bake
+        - 並列ビルド、依存関係の最適化
+      - Classic Build
+        - 従来のdocker build
+  - ensureImagesExists: イメージ存在保証
+    - すべての必要なイメージが存在することを保証
+    - サービス検証
+    - ローカルイメージの取得
+    - 必要なイメージをpull
+    - 必要なイメージをビルド
+    - イメージダイジェストをラベルに設定
+  - getLocalImagesDigests: ローカルイメージ取得
+    - イメージ名の収集
+    - プラットフォーム検証
+  - resolveAndMergeBuildArgs
+    - ビルド引数のマージ
+  - getImageBuildLabels
+    - ビルドラベル生成
+    - 自動追加されるラベル
+      - Composeバージョン
+      - プロジェクト名
+      - サービス名
+  - addBuildDependencies
+    - ビルド依存関係の追跡

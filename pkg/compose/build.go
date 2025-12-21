@@ -161,6 +161,7 @@ func (s *composeService) ensureImagesExists(ctx context.Context, project *types.
 	return nil
 }
 
+// TODO: レシーバ名の衝突
 func (s *composeService) getLocalImagesDigests(ctx context.Context, project *types.Project) (map[string]api.ImageSummary, error) {
 	imageNames := utils.Set[string]{}
 	for _, s := range project.Services {
