@@ -1,0 +1,34 @@
+- docker compose down 相当の処理
+  - コンテナ停止・削除、必要に応じてネットワーク/ボリューム/イメージ削除
+- Down
+  - エントリポイント
+- down
+  - 「何を消すか」を決めて、依存関係順にコンテナを落として消し、その後にネットワーク/イメージ/ボリュームを消す
+  - 処理の流れ
+    - コンテナの取得
+    - プロジェクトの取得
+    - サービスの検証
+      - 指定されたサービスがプロジェクト内に存在するか
+    - 依存関係の逆順でコンテナを削除
+    - 孤立コンテナの削除
+    - 並列でリソースの削除
+- ensureNetworksDown
+  - 削除するネットワークの操作リストを生成
+- removeNetwork
+  - 実際のネットワーク削除
+- ensureImagesDown
+  - ImagePruner を使って削除対象イメージを特定
+- removeImage
+  - イメージを削除
+- ensureVolumesDown
+  - 外部ボリューム以外を削除対象に
+- removeVolume
+  - ボリュームを削除
+- stopContainer
+  - コンテナを停止
+- removeContainers
+  - 複数コンテナを並列で停止・削除
+- stopAndRemoveContainer
+  - 停止して削除の一連の処理
+- getProjectWithResources
+  - コンテナからプロジェクトを再構築

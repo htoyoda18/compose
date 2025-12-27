@@ -33,7 +33,7 @@
   - build: メインビルドロジック
     - 初期化
       - imageIDs
-        - ビルドされたイメージのIDを格納
+        - ビルドされたイメージの ID を格納
       - serviceToBuild
         - 実際にビルドするサービスのリスト
       - policy
@@ -42,21 +42,21 @@
       - options.Services = project.ServiceNames()
         - 指定なしなら全サービス
       - addBuildDependencies
-        - additional_contextsで参照されているサービスもビルド対象に追加
+        - additional_contexts で参照されているサービスもビルド対象に追加
     - ビルドが必要なサービスのフィルタリング
       - フィルタリング条件
         - service.Build == nil → スキップ
-        - ローカルにイメージがあり、pull_policy: buildでない → スキップ
+        - ローカルにイメージがあり、pull_policy: build でない → スキップ
     - ビルド方式の選択
       - BuildKit Bake
         - 並列ビルド、依存関係の最適化
       - Classic Build
-        - 従来のdocker build
+        - 従来の docker build
   - ensureImagesExists: イメージ存在保証
     - すべての必要なイメージが存在することを保証
     - サービス検証
     - ローカルイメージの取得
-    - 必要なイメージをpull
+    - 必要なイメージを pull
     - 必要なイメージをビルド
     - イメージダイジェストをラベルに設定
   - getLocalImagesDigests: ローカルイメージ取得
@@ -67,7 +67,7 @@
   - getImageBuildLabels
     - ビルドラベル生成
     - 自動追加されるラベル
-      - Composeバージョン
+      - Compose バージョン
       - プロジェクト名
       - サービス名
   - addBuildDependencies
