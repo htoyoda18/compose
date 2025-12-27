@@ -1,0 +1,31 @@
+- Docker Compose サービスの中核実装
+- composeService
+  - api.Compose インターフェースを実装し、Down、Build、Up などのメソッドを提供
+- NewComposeService
+  - コンストラクタ
+- Option 関数群
+  - WithStreams
+    - I/O ストリームをまとめて設定
+  - WithOutputStream/WithErrorStream/WithInputStream
+    - 個別設定
+  - WithContextInfo
+    - Docker コンテキスト情報
+  - WithProxyConfig
+    - プロキシ設定
+  - WithPrompt
+    - ユーザー確認 UI
+  - WithMaxConcurrency
+    - 並列度制限
+  - WithDryRun
+    - ドライランモード
+  - WithEventProcessor
+    - イベント処理
+- projectFromName
+  - プロジェクトの再構築
+  - 既存のコンテナからプロジェクトを再構築する重要な機能
+- リソースの取得
+  - 実際のボリュームとネットワークを Docker から取得
+- getCanonicalContainerName
+  - container_name が設定されているかを判定
+- Close
+  - CleanUp 処理
