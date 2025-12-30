@@ -1,0 +1,10 @@
+- 責務
+  - Git リポジトリからのリモートリソース読み込み
+- gitRemoteLoader
+  - Git リポジトリから Compose ファイルをロード
+  - Accept
+    - Git URL かどうかを判定
+  - Load
+    - Git リポジトリをクローンしてファイルを取得
+  - Dir
+    - ローカルキャッシュパスを返す

@@ -1,0 +1,16 @@
+- cache_darwin.go
+  - macOS
+- cache_unix.go
+  - Unix/Linux
+- cache_windows.go
+  - Windows
+- cache.go
+  - キャッシュディレクトリ取得
+- git_test.go
+  - テスト
+- git.go
+  - Git リポジトリからのロード
+- oci_test.go
+  - テスト
+- oci.go
+  - OCI レジストリからのロード
