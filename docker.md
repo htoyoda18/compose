@@ -1,0 +1,28 @@
+- OCI
+  - Open Container Initiative
+  - コンテナ技術の標準仕様
+  - この形式で作れば、どのコンテナ環境でも動く
+- パストラバーサル攻撃
+  - 本来アクセスできないファイルを、URL や入力値を細工して読み取る攻撃
+- docker compose
+  - コマンド https://chatgpt.com/c/695374b5-06e8-8324-97b3-f423942ba35a
+    - up
+      - コンテナを起動
+    - down
+      - コンテナ・ネットワークを停止＆削除
+    - start
+      -
+    - stop
+    - ps
+    - logs
+    - top
+    - build
+    - pull
+    - exec
+    - run
+    - restart
+    - config
+    - ls
+    - rm
+    - down
+    - events
