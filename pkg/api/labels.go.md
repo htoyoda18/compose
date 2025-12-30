@@ -1,0 +1,23 @@
+- 責務
+  - Docker ラベル定数定義
+- リソース追跡ラベル
+  - ProjectLabel
+    - プロジェクト名
+  - ServiceLabel
+    - サービス名
+  - VolumeLabel
+    - ボリューム
+  - NetworkLabel
+    - ネットワーク
+  - ContainerNumberLabel
+    - レプリカ番号
+- 設定関連
+  - ConfigHashLabel
+    - 設定のハッシュ値
+- メタデータ
+  - VersionLabel
+    - Compose バージョン
+  - ImageDigestLabel
+    - イメージダイジェスト
+  - DependenciesLabel
+    - 依存関係
