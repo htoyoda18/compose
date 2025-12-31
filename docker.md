@@ -11,18 +11,30 @@
     - down
       - コンテナ・ネットワークを停止＆削除
     - start
-      -
+      - 停止中のコンテナを再起動
     - stop
+      - コンテナを停止
     - ps
+      - Compose 配下のコンテナ一覧
     - logs
+      - ログを見る
     - top
+      - コンテナ内プロセス一覧
     - build
+      - イメージをビルド
     - pull
+      - イメージを取得
     - exec
+      - 起動中コンテナに入る
     - run
+      - 一時コンテナを起動してコマンド実行
     - restart
+      - 再起動
     - config
+      - compose.yaml を展開・検証
     - ls
+      - Compose プロジェクト一覧
     - rm
-    - down
+      - 停止中コンテナを削除
     - events
+      - イベント監視
