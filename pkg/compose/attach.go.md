@@ -1,0 +1,25 @@
+- 責務
+  - Docker Compose の attach コマンド実装
+- 構造と処理
+  - attach
+    - コンテナの取得
+    - 色割り当ての一貫性
+    - アタッチメッセージ表示
+    - 各コンテナにアタッチ
+  - attachContainer
+    - コンテナごとのアタッチ処理
+  - doAttachContainer
+    - 実際のアタッチ処理の中核
+    - コンテナ情報の取得
+    - 標準出力/エラー出力のラッパー作成
+    - ストリームへのアタッチ
+  - attachContainerStreams メソッド
+    - ストリームの接続処理
+    - ターミナルの Raw モード設定
+    - コンテナストリームの取得
+    - コンテキストキャンセル時のクリーンアップ
+    - 標準入力のコピー
+    - 標準出力/エラーのコピー 
+  - getContainerStreams メソッド
+    - ContainerAttach API を試行
+    - ContainerLogs API にフォールバック
