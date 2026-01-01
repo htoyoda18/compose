@@ -13,7 +13,7 @@ Docker Compose v2 は、Docker 上でマルチコンテナアプリケーショ�
 ## ルートファイル/ルートディレクト
 
 - .github
-  - GitHub設定
+  - GitHub 設定
 - cmd
   - エントリーポイント
 - docs
@@ -272,3 +272,41 @@ GitHub Actions で以下を実行:
 Docker Compose v2 は、Go で実装された高性能なマルチコンテナオーケストレーションツールです。Python 版から完全に書き直され、Docker CLI プラグインとして動作しながらも、SDK として他のアプリケーションから利用することも可能です。
 
 包括的なテストスイート、11 プラットフォーム対応、拡張可能なアーキテクチャ、OpenTelemetry 対応など、エンタープライズグレードの品質を備えており、開発から本番環境まで幅広く使用されています。
+
+## コードの読み方
+
+### Phase 1: エントリーポイントの理解
+
+1. cmd/main.go (86 行)
+   ↓ main() → pluginMain() → RootCommand()
+2. cmd/compose/compose.go:424 (RootCommand)
+   ↓ 全サブコマンドを登録
+3. cmd/compose/up.go (upCommand)
+   ↓ 1 つのコマンドを深堀り
+4. pkg/api/api.go
+   ↓ Service インターフェース定義を確認
+5. pkg/compose/compose.go
+   ↓ Service インターフェースの実装
+
+### Phase 2: 1 つのコマンドを完全に理解
+
+docker compose up から始める
+
+### Phase 3: 横展開 - 他のコマンド
+
+優先度 高:
+├─ down.go # up の逆、削除ロジック
+├─ build.go # Buildkit 連携
+├─ logs.go # ストリーミング処理
+└─ run.go # 一時コンテナ
+
+優先度 中:
+├─ exec.go # 実行中コンテナ操作
+├─ ps.go # 状態取得
+└─ scale.go # レプリカ制御
+
+### Phase 4: 深い部分を理解
+
+Docker API 連携
+Compose ファイルパース
+並行制御・同期
