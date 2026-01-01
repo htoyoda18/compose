@@ -1,0 +1,82 @@
+- alpha.go
+  - 実験的機能のグループ
+- attach.go
+  - コンテナにアタッチ
+- bridge.go
+- build.go
+  - イメージビルド
+  - --no-cache, --pull, --push などのビルドオプション
+- commit.go
+- completion.go
+- compose_test.go
+- compose.go
+  - Docker Compose のメインエントリーポイント
+- config.go
+  - Compose 設定の表示・検証
+- cp.go
+  - ファイルコピー
+- create.go
+  - コンテナ作成のみ
+- down.go
+  - サービス停止・削除
+- events.go
+  - イベントストリーム
+- exec.go
+  - 実行中コンテナでコマンド実行
+- export.go
+- generate.go
+- images.go
+  - イメージ一覧
+- kill.go
+  - 強制終了
+- list.go
+  - プロジェクト一覧
+- logs.go
+  - ログ表示
+- options_test.go
+- options.go
+  - 共通オプション定義
+- pause.go
+  - 一時停止
+- port.go
+- ps.go
+  - コンテナ一覧
+- publish.go
+  - OCI 公開
+- pull.go
+  - イメージの pull
+- pullOptions_test.go
+- push.go
+  - イメージの push
+- remove.go
+  - コンテナ削除
+- restart.go
+  - 再起動
+- run.go
+  - 一時コンテナ実行
+  - --rm で実行後削除、--detach でバックグラウンド実行
+- scale.go
+  - レプリカ数変更
+- start.go
+  - 既存コンテナの起動
+- stats.go
+  - リソース使用状況のリアルタイム表示
+- stop.go
+  - サービス停止
+- top_test.go
+- top.go
+  - 実行中プロセス表示
+- up_test.go
+- up.go
+- version_test.go
+- version.go
+  - バージョン表示
+- viz_test.go
+- viz.go
+  - プロジェクト構造の可視化
+- volumes.go
+  - ボリューム管理
+- wait.go
+  - コンテナ停止まで待機
+- watch.go
+  - ファイル変更監視と自動リビルド
