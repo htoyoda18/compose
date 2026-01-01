@@ -1,8 +1,23 @@
 - ルートファイル
+- ざっくりした処理の流れ
+  - docker compose ... が呼ばれたときに、Compose の cobra ルートコマンドを組み立てて実行
+  - Docker CLI プラグインとしての共通初期化
+    - 入出力
+    - コンテキスト
+    - docker daemon
+  - 追加で tracing を有効化しようとする
+  - エラー時の挙動を Docker CLI っぽい StatusError に統一
+  - standalone 実行の場合は 旧 docker-compose 互換の引数変換をしてから動かす
 - pluginMain
+  - plugin.Run
+    - 引数
+      - コマンド生成関数
+      - プラグインメタデータ
+      - オプション
   - Docker CLI プラグインとして動作するメイン処理
   - backendOptions
     - バックエンドオプション設定
+    - Compose の内部 backend に渡す compose.Option を組み立て
   - RootCommand
     - ルートコマンド作成
   - PreRunE
@@ -22,7 +37,7 @@
   - 実行モード判定
   - 必要に応じてコマンド引数を変換
   - pluginMain() 呼び出し
-  - RootCommand作成
+  - RootCommand 作成
   - 各サブコマンド登録
     - up, down, build
   - PreRunE フック実行
