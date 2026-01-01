@@ -1,5 +1,40 @@
 - composeOptions
   - Compose プロジェクトを扱うためのオプション
+- upOptions
+  - Detach
+    - バックグラウンド起動にするか
+  - noStart
+    - 作成はするが起動しない
+  - noDeps
+    - 依存サービスを起動しない
+  - cascadeStop
+    - どれかのコンテナが停止したら、他も止める
+  - cascadeFail
+    - どれかが失敗したら、他も止める
+  - exitCodeFrom
+    - 指定したサービスの終了コードを、docker compose up 全体の終了コードとして返す
+  - noColor
+    - ログ出力をモノクロにする
+  - noPrefix
+    - ログの prefixを付けない
+  - attachDependencies
+    - 依存サービスのログにも自動 attach
+  - attach
+    - attachするサービスを明示指定する
+  - noAttach
+    - ログ attach しないサービスを明示指定する
+  - timestamp
+    - ログにタイムスタンプを表示
+  - wait
+    - サービスが running/healthy になるまで待つ
+  - waitTimeout
+    - --wait 時の 最大待機秒数
+  - watch
+    - ファイル変更を監視して rebuild/refresh する
+  - navigationMenu
+    - attached 実行中のインタラクティブショートカットを有効化する
+  - navigationMenuChanged
+    - ユーザーにより明示的に変更されたかを保持する
 - apply
   - --no-deps のとき、対象サービスだけに絞って依存を無視する形にプロジェクトを変換
   - --exit-code-from SERVICE のとき、その SERVICE が存在するか検証
@@ -14,7 +49,7 @@
       - あるコンテナが終了しても他のコンテナは継続実行
       - 通常のバックグラウンド起動時の動作
     - CascadeStop
-      - どれか1つでもコンテナが終了したら、全コンテナを停止
+      - どれか 1 つでもコンテナが終了したら、全コンテナを停止
       - テストやバッチ処理で便利
     - CascadeFail
       - コンテナが失敗で終了したら、全コンテナを停止
