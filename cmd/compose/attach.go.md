@@ -1,0 +1,28 @@
+- 責務
+  - docker compose attach コマンドの一部
+- 前提知識
+  - attach コマンド
+    - 起動中コンテナの標準入力・出力に接続する
+    - 挙動をそのまま見る
+- ざっくり全体の処理
+  - Cobra で CLI コマンドとフラグを定義
+  - 入力を api.AttachOptions に詰め替え
+  - backend を作成
+  - backend.Attach を呼ぶ
+- attachOpts
+  - CLI の入力を保持する構造体
+  - service
+    - サービス名？
+  - index
+    - 複数レプリカのときの何番目のコンテナに attach するか
+  - detachKeys
+    - detach するキーシーケンス
+  - noStdin
+    - STDIN を attach しない
+  - proxy
+    - 受け取ったシグナルをコンテナ側プロセスに中継する
+- attachCommand
+  - Cobra のコマンドを組み立てる
+  - フラグの定義
+- runAttach
+  - Project 名解決 → backend 呼び出し
