@@ -1,0 +1,7 @@
+- 責務
+  - 対象コンテナを決めて docker/cli の attach を実行する
+- 具体的な処理
+  - Compose のラベル/名前解決を小文字前提に寄せてる
+  - SERVICE と INDEX から “attach する対象コンテナ” を 1 個に絞る
+  - options.DetachKeys が空なら s.configFile().DetachKeys を使う
+  - docker/cli の attach オプションへ変換して attach 実行
