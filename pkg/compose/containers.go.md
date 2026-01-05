@@ -1,0 +1,48 @@
+- 責務
+  - プロジェクト配下のコンテナ一覧を取って、必要に応じて絞り込み・並べ替えする
+- Containers
+  - Docker Engine API が返すコンテナ概要のスライスに、**Compose 側の便利メソッド（filter / names / sorted など）**を生やした型
+- oneOffInclude
+  - oneOffInclude
+    - one-off も通常も両方含める
+  - oneOffExclude
+    - one-off を除外する
+  - oneOffOnly
+    - one-off のみ
+- getContainers
+  - コンテナ一覧を取る
+  - 検索フィルタを作る
+  - Docker Engine に ContainerList を投げる
+  - サービスが複数指定のとき追加で絞る
+- getDefaultFilters
+  - まず必ず project で絞る
+  - サービスが 1 つだけ指定なら Docker の filter に入れる
+  - hasConfigHashLabel
+  - one-off 条件を追加
+- getSpecifiedContainer
+  - 概要
+    - "サービス#番号" のコンテナを取る
+    - docker compose exec SERVICE みたいな場面で、どのコンテナをターゲットにするかを決める
+  - 詳細の処理
+    - filters を作る
+      - 基本は getDefaultFilters
+    - ContainerList して、無ければエラー
+    - 並べ替えて先頭を返す
+      - one-off コンテナは末尾に追いやる
+      - 通常コンテナ同士なら container number が小さい順
+- containerPredicate
+  - 「コンテナが条件を満たすか？」の関数型
+- matches
+  - predicates を全部（AND）満たすか
+- isService
+  - api.ServiceLabel を見て、指定サービス名のどれかに一致するか
+- isOrphaned
+  - Compose のプロジェクト定義に存在しないサービスのコンテナ orphan とみなす判定
+- isNotOneOff
+  - api.OneoffLabel が無い、または "False" なら true
+- names
+  - canonical name
+- forEach
+  - 単純ループ
+- sorted
+  - canonical name でソート
