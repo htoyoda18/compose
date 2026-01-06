@@ -46,3 +46,26 @@
   - 複数アーキテクチャ向けのマルチプラットフォームビルドを 1 コマンドで実行
 - oneOff
   - docker compose run で起動される 一時的・使い捨てのコンテナを指す概念
+- Compose の「3 レイヤ」
+  - Spec
+    - ユーザーが書く宣言(compose.yaml)
+    - services / networks / volumes / configs / secrets…
+  - Model
+    - YAML をパース・正規化した“内部表現”
+  - Runtime
+    - 最終的に Container / Network / Volume として作られる世界
+- Project という単位
+  - 「プロジェクト」= サービス集合 + 付随リソースの束
+- ラベル設計
+  - Compose は Docker Engine 上に“状態 DB”を持てない
+  - 内部で compose 管理下のリソースを探す処理は、ほぼ filters + labels
+- 望ましい状態と実際の状態
+  - Compose のコアはコントローラ
+  - 望ましい状態
+  - 実際の状態
+  - 差分を埋める
+  - up の動作
+    - 既存があれば 差分で recreate
+    - 依存関係順に 起動順も制御
+- config-hash と recreate の条件
+  - 
