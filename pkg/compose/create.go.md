@@ -1,0 +1,86 @@
+- createOptions
+  - コンテナ作成時のオプション
+  - 自動削除、Stdin アタッチ、ネットワークエイリアス
+- createConfigs
+  - コンテナ作成に必要な 3 つの設定
+  - Container、Host、Network
+- Create
+  - 公開メソッド
+  - Run でラップして実際の処理を create に委譲
+- create
+  - 実際のコンテナ作成処理
+  - サービス名のチェック → イメージの確保 → ネットワーク/ボリューム作成 → オーファンコンテナ処理 → convergence 適用
+- prepareNetworks
+  - ネットワークにラベル追加
+- ensureNetworks
+  - プロジェクト内の全ネットワークを確保
+- ensureNetwork
+  - 個別ネットワークを確保
+- ensureProjectVolumes
+  - プロジェクトの全ボリュームを確保
+- getCreateConfigs
+  - ラベル、環境変数、ネットワーク、ヘルスチェック、ポート、ボリューム、リソース制限など全てを組み立てる
+- prepareContainerMACAddress
+  - MAC アドレスの処理
+- getAliases
+- createEndpointSettings
+  - エンドポイント設定の生成
+- parseSecurityOpts
+  - セキュリティオプション(seccomp など)のパース
+- prepareLabels
+- defaultNetworkSettings
+  - ネットワーク設定のデフォルト値決定
+- getRestartPolicy
+  - 再起動ポリシーの取得
+- mapRestartPolicyCondition
+- getDeployResources
+  - CPU やメモリなどのリソース設定を構築
+- toUlimits
+- setReservations
+- setLimits
+- setBlkio
+- buildContainerPorts
+  - exposed ポートの設定
+- buildContainerPortBindingOptions
+  - ポートバインディングの設定
+- getDependentServiceFromMode
+- buildContainerVolumes
+  - コンテナのボリューム/マウントを Binds と Mounts に分離
+- toBindString
+  - マウントを従来のBind文字列に変換
+- findVolumeByName
+- findVolumeByTarget
+- bindRequiresMountAPI
+- volumeRequiresMountAPI
+- buildContainerMountOptions
+  - マウントオプションの構築
+- fillBindMounts
+- buildContainerSecretMounts
+  - Secretsのマウント処理
+- buildContainerConfigMounts
+  - Configsのマウント処理
+- isUnixAbs
+- isWindowsAbs
+- buildMount
+  - 個別マウントの構築
+- buildMountOptions
+  - タイプ別(bind/volume/tmpfs/image)のマウントオプション作成
+- buildBindOption
+- buildVolumeOptions
+- buildTmpfsOptions
+- buildImageOptions
+- ensureNetwork
+- resolveOrCreateNetwork
+  - ネットワークの解決/作成のメインロジック
+- removeDivergedNetwork
+  - 設定が変わったネットワークの削除
+- disconnectNetwork
+- connectNetwork
+- resolveExternalNetwork
+  - 外部ネットワークの解決
+- ensureVolume
+  - 個別ボリュームの確保
+- removeDivergedVolume
+  - 設定が変わったボリュームの削除
+- createVolume
+  - ボリュームの作成
