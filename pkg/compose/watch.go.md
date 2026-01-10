@@ -1,0 +1,30 @@
+- 概要
+  - watch 設定を集めてルール化
+  - ファイル変更イベントを監視してバッチ化
+  - 変更に応じて action（sync / rebuild / restart / exec）を実行
+- Watcher
+  - watch を開始/停止するための薄いラッパ
+- composeService.watch
+  - 監視対象を組み立てる
+  - FS watcher を起動する
+  - イベント処理ループを goroutine で回す
+  - 待機関数を返す
+- watchRule / getWatchRules
+  - 各 develop.watch の trigger を マッチャにコンパイル
+  - 変更されたファイルが「どのサービスのどのアクション対象か」を判定
+- watchEvents / handleWatchBatch
+  - 生イベントを debounce + batch してまとめる
+  - バッチ内のイベントをルールに当てて
+- syncer
+  - 抽象化された同期エンジン
+  - 現状は tar でまとめて CopyToContainer する
+- NewWatcher
+  - project.Services を走査して、どれか一つでも service.Develop.Watch != nil があれば Watcher を作る
+- getSyncImplementation
+- 全体の処理フロー
+  - Watcher 作成
+  - Watch 開始
+  - セットアップ
+  - イベントループ
+  - バッチ処理
+    https://chatgpt.com/c/695cfcb9-a620-8323-a22d-ce3eaf5e7de6

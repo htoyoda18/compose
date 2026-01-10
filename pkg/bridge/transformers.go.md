@@ -1,0 +1,13 @@
+- 概要
+  - Compose Bridge 用の“Transformer イメージ”を作るための雛形ディレクトリを生成する
+- ざっくりした処理
+  - ある Docker イメージ（デフォルト docker/compose-bridge-kubernetes）から /templates を取り出し
+  - ローカルの出力先に展開
+  - その templates を同梱するための Dockerfile を生成
+  - ローカルにある “Transformer イメージ” 一覧を label で検索できるようにする
+- CreateTransformer
+  - 元イメージの中に入っている /templates をコピー
+  - 出力ディレクトリに templates/ と Dockerfile を作る
+  - ユーザーが docker build できる形のフォルダを生成
+- ListTransformers
+  - com.docker.compose.bridge=transformation のラベルを持つ ローカルイメージ一覧を返す
