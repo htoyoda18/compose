@@ -1,0 +1,22 @@
+- ざっくり全体的な処理
+  - コンテナの取得
+    - getContainers で指定プロジェクトのコンテナを取得
+    - oneOffInclude を使って一時的なコンテナも含める
+    - options.Services で特定のサービスのみをフィルタリング
+  - 並行待機
+    - errgroup.WithContext で複数のコンテナを並行して監視
+    - 各コンテナに対して goroutine を起動
+  - ContainerWait API の使用
+    - Docker API の ContainerWait を呼び出し
+    - 結果チャネル (resultC) とエラーチャネル (errC) を受信
+  - 結果の受信
+    - select 文でコンテナの終了を待機
+    - 終了時はステータスコードをログ出力して保存
+    - エラーが発生した場合はエラーを返す
+  - エラーハンドリング
+    - eg.Wait() で全ての goroutine の完了を待機
+    - エラーがあった場合は ステータスコード 42 を返す
+  - オプション処理
+    - DownProjectOnContainerExit が true の場合
+    - コンテナ終了後に自動的に Down コマンドを実行
+    - プロジェクト全体をクリーンアップ
