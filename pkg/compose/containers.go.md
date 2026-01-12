@@ -15,8 +15,12 @@
   - Docker Engine に ContainerList を投げる
   - サービスが複数指定のとき追加で絞る
 - getDefaultFilters
+  - 概要
+    - Docker API を使ってコンテナをリストアップする際に使用するフィルタ条件を生成する
   - まず必ず project で絞る
   - サービスが 1 つだけ指定なら Docker の filter に入れる
+    - Docker API のフィルタは AND 条件
+    - 複数サービスをフィルタに入れると「service=web AND service=db」となり、マッチするコンテナがなくなる
   - hasConfigHashLabel
   - one-off 条件を追加
 - getSpecifiedContainer
