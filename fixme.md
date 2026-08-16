@@ -1,0 +1,11 @@
+- go.mod:160
+  - exclude ブロックの FIXME
+- cmd/display/tty.go:56
+  - dryRun フィールドが未接続
+  - ttyWriter.dryRun は lineText() で "DRY-RUN" 表示に使われている
+  - コンストラクタ Full(out, info) (tty.go:38) には dryRun を渡す引数がなく、常に false のまま
+- pkg/compose/build_bake.go:298
+  - bake への fs.read 自動許可
+  - 本来はユーザーに確認すべき（セキュリティ境界を暗黙に緩めている）が、確認プロンプトを挟むと UX が壊れる
+- pkg/compose/create_test.go:330
+  - バグではなく、クリーンアップの TODO
