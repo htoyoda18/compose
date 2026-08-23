@@ -9,3 +9,11 @@
   - 本来はユーザーに確認すべき（セキュリティ境界を暗黙に緩めている）が、確認プロンプトを挟むと UX が壊れる
 - pkg/compose/create_test.go:330
   - バグではなく、クリーンアップの TODO
+- create.go:1247
+  - DriverConfig がモデルにない
+- create.go:1619
+  - コンテナ削除と anonymous volume 継承の競合
+- watch.go:729
+  - おそらく解消済みの残骸コメント
+- e2e/build_test.go:176
+  - ブロッキング Issue は解消済み
