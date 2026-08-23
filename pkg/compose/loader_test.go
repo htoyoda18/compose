@@ -17,14 +17,13 @@
 package compose
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/compose-spec/compose-go/v2/cli"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"gotest.tools/v3/assert"
+	is "gotest.tools/v3/assert/cmp"
 
 	"github.com/docker/compose/v5/pkg/api"
 )
@@ -46,25 +45,22 @@ services:
       POSTGRES_PASSWORD: secret
 `
 	err := os.WriteFile(composeFile, []byte(composeContent), 0o644)
-	require.NoError(t, err)
+	assert.NilError(t, err)
 
-	// Create compose service
 	service, err := NewComposeService(nil)
-	require.NoError(t, err)
+	assert.NilError(t, err)
 
 	// Load the project
-	ctx := context.Background()
-	project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+	project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 		ConfigPaths: []string{composeFile},
 	})
 
 	// Assertions
-	require.NoError(t, err)
-	assert.NotNil(t, project)
+	assert.NilError(t, err)
 	assert.Equal(t, "test-project", project.Name)
-	assert.Len(t, project.Services, 2)
-	assert.Contains(t, project.Services, "web")
-	assert.Contains(t, project.Services, "db")
+	assert.Assert(t, is.Len(project.Services, 2))
+	assert.Check(t, is.Contains(project.Services, "web"))
+	assert.Check(t, is.Contains(project.Services, "db"))
 
 	// Check labels were applied
 	webService := project.Services["web"]
@@ -84,46 +80,41 @@ services:
       - LITERAL_VAR=literal_value
 `
 	err := os.WriteFile(composeFile, []byte(composeContent), 0o644)
-	require.NoError(t, err)
+	assert.NilError(t, err)
 
 	// Set environment variable
-	require.NoError(t, os.Setenv("TEST_VAR", "resolved_value"))
-	t.Cleanup(func() {
-		require.NoError(t, os.Unsetenv("TEST_VAR"))
-	})
+	t.Setenv("TEST_VAR", "resolved_value")
 
 	service, err := NewComposeService(nil)
-	require.NoError(t, err)
-
-	ctx := context.Background()
+	assert.NilError(t, err)
 
 	// Test with environment resolution (default)
 	t.Run("WithResolution", func(t *testing.T) {
-		project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+		project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 			ConfigPaths: []string{composeFile},
 		})
-		require.NoError(t, err)
+		assert.NilError(t, err)
 
 		appService := project.Services["app"]
 		// Environment should be resolved
-		assert.NotNil(t, appService.Environment["TEST_VAR"])
+		assert.Assert(t, appService.Environment["TEST_VAR"] != nil)
 		assert.Equal(t, "resolved_value", *appService.Environment["TEST_VAR"])
-		assert.NotNil(t, appService.Environment["LITERAL_VAR"])
+		assert.Assert(t, appService.Environment["LITERAL_VAR"] != nil)
 		assert.Equal(t, "literal_value", *appService.Environment["LITERAL_VAR"])
 	})
 
 	// Test without environment resolution
 	t.Run("WithoutResolution", func(t *testing.T) {
-		project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+		project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 			ConfigPaths:       []string{composeFile},
 			ProjectOptionsFns: []cli.ProjectOptionsFn{cli.WithoutEnvironmentResolution},
 		})
-		require.NoError(t, err)
+		assert.NilError(t, err)
 
 		appService := project.Services["app"]
 		// Environment should NOT be resolved, keeping raw values
 		// Note: This depends on compose-go behavior, which may still have some resolution
-		assert.NotNil(t, appService.Environment)
+		assert.Assert(t, appService.Environment != nil)
 	})
 }
 
@@ -140,24 +131,22 @@ services:
     image: redis:latest
 `
 	err := os.WriteFile(composeFile, []byte(composeContent), 0o644)
-	require.NoError(t, err)
+	assert.NilError(t, err)
 
 	service, err := NewComposeService(nil)
-	require.NoError(t, err)
-
-	ctx := context.Background()
+	assert.NilError(t, err)
 
 	// Load only specific services
-	project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+	project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 		ConfigPaths: []string{composeFile},
 		Services:    []string{"web", "db"},
 	})
 
-	require.NoError(t, err)
-	assert.Len(t, project.Services, 2)
-	assert.Contains(t, project.Services, "web")
-	assert.Contains(t, project.Services, "db")
-	assert.NotContains(t, project.Services, "cache")
+	assert.NilError(t, err)
+	assert.Check(t, is.Len(project.Services, 2))
+	assert.Check(t, is.Contains(project.Services, "web"))
+	assert.Check(t, is.Contains(project.Services, "db"))
+	assert.Check(t, !is.Contains(project.Services, "cache")().Success())
 }
 
 func TestLoadProject_WithProfiles(t *testing.T) {
@@ -172,33 +161,31 @@ services:
     profiles: ["debug"]
 `
 	err := os.WriteFile(composeFile, []byte(composeContent), 0o644)
-	require.NoError(t, err)
+	assert.NilError(t, err)
 
 	service, err := NewComposeService(nil)
-	require.NoError(t, err)
-
-	ctx := context.Background()
+	assert.NilError(t, err)
 
 	// Without debug profile
 	t.Run("WithoutProfile", func(t *testing.T) {
-		project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+		project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 			ConfigPaths: []string{composeFile},
 		})
-		require.NoError(t, err)
-		assert.Len(t, project.Services, 1)
-		assert.Contains(t, project.Services, "web")
+		assert.NilError(t, err)
+		assert.Check(t, is.Len(project.Services, 1))
+		assert.Check(t, is.Contains(project.Services, "web"))
 	})
 
 	// With debug profile
 	t.Run("WithProfile", func(t *testing.T) {
-		project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+		project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 			ConfigPaths: []string{composeFile},
 			Profiles:    []string{"debug"},
 		})
-		require.NoError(t, err)
-		assert.Len(t, project.Services, 2)
-		assert.Contains(t, project.Services, "web")
-		assert.Contains(t, project.Services, "debug")
+		assert.NilError(t, err)
+		assert.Check(t, is.Len(project.Services, 2))
+		assert.Check(t, is.Contains(project.Services, "web"))
+		assert.Check(t, is.Contains(project.Services, "debug"))
 	})
 }
 
@@ -211,12 +198,10 @@ services:
     image: nginx:latest
 `
 	err := os.WriteFile(composeFile, []byte(composeContent), 0o644)
-	require.NoError(t, err)
+	assert.NilError(t, err)
 
 	service, err := NewComposeService(nil)
-	require.NoError(t, err)
-
-	ctx := context.Background()
+	assert.NilError(t, err)
 
 	// Track events received
 	var events []string
@@ -224,13 +209,13 @@ services:
 		events = append(events, event)
 	}
 
-	project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+	project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 		ConfigPaths:   []string{composeFile},
 		LoadListeners: []api.LoadListener{listener},
 	})
 
-	require.NoError(t, err)
-	assert.NotNil(t, project)
+	assert.NilError(t, err)
+	assert.Assert(t, project != nil)
 
 	// Listeners should have been called (exact events depend on compose-go implementation)
 	// The slice itself is always initialized (non-nil), even if empty
@@ -246,30 +231,28 @@ services:
     image: nginx:latest
 `
 	err := os.WriteFile(composeFile, []byte(composeContent), 0o644)
-	require.NoError(t, err)
+	assert.NilError(t, err)
 
 	service, err := NewComposeService(nil)
-	require.NoError(t, err)
-
-	ctx := context.Background()
+	assert.NilError(t, err)
 
 	// Without explicit project name
 	t.Run("InferredName", func(t *testing.T) {
-		project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+		project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 			ConfigPaths: []string{composeFile},
 		})
-		require.NoError(t, err)
+		assert.NilError(t, err)
 		// Project name should be inferred from directory
-		assert.NotEmpty(t, project.Name)
+		assert.Assert(t, project.Name != "")
 	})
 
 	// With explicit project name
 	t.Run("ExplicitName", func(t *testing.T) {
-		project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+		project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 			ConfigPaths: []string{composeFile},
 			ProjectName: "my-custom-project",
 		})
-		require.NoError(t, err)
+		assert.NilError(t, err)
 		assert.Equal(t, "my-custom-project", project.Name)
 	})
 }
@@ -283,21 +266,19 @@ services:
     image: nginx:latest
 `
 	err := os.WriteFile(composeFile, []byte(composeContent), 0o644)
-	require.NoError(t, err)
+	assert.NilError(t, err)
 
 	service, err := NewComposeService(nil)
-	require.NoError(t, err)
-
-	ctx := context.Background()
+	assert.NilError(t, err)
 
 	// With compatibility mode
-	project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+	project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 		ConfigPaths:   []string{composeFile},
 		Compatibility: true,
 	})
 
-	require.NoError(t, err)
-	assert.NotNil(t, project)
+	assert.NilError(t, err)
+	assert.Assert(t, project != nil)
 	// In compatibility mode, separator should be "_"
 	assert.Equal(t, "_", api.Separator)
 
@@ -312,33 +293,29 @@ func TestLoadProject_InvalidComposeFile(t *testing.T) {
 this is not valid yaml: [[[
 `
 	err := os.WriteFile(composeFile, []byte(composeContent), 0o644)
-	require.NoError(t, err)
+	assert.NilError(t, err)
 
 	service, err := NewComposeService(nil)
-	require.NoError(t, err)
-
-	ctx := context.Background()
+	assert.NilError(t, err)
 
 	// Should return an error for invalid YAML
-	project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+	project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 		ConfigPaths: []string{composeFile},
 	})
 
-	require.Error(t, err)
-	assert.Nil(t, project)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, project == nil)
 }
 
 func TestLoadProject_MissingComposeFile(t *testing.T) {
 	service, err := NewComposeService(nil)
-	require.NoError(t, err)
-
-	ctx := context.Background()
+	assert.NilError(t, err)
 
 	// Should return an error for missing file
-	project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+	project, err := service.LoadProject(t.Context(), api.ProjectLoadOptions{
 		ConfigPaths: []string{"/nonexistent/compose.yaml"},
 	})
 
-	require.Error(t, err)
-	assert.Nil(t, project)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, project == nil)
 }

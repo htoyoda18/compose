@@ -74,8 +74,14 @@ func composeCommand() *cobra.Command {
 	downCmd.Flags().String("name", "", "Name of the database to be deleted")
 	_ = downCmd.MarkFlagRequired("name")
 
-	c.AddCommand(upCmd, downCmd)
-	c.AddCommand(metadataCommand(upCmd, downCmd))
+	stopCmd := &cobra.Command{
+		Use:  "stop",
+		Run:  stop,
+		Args: cobra.ExactArgs(1),
+	}
+
+	c.AddCommand(upCmd, downCmd, stopCmd)
+	c.AddCommand(metadataCommand(upCmd, downCmd, stopCmd))
 	return c
 }
 
@@ -90,27 +96,36 @@ func up(options options, args []string) {
 		fmt.Printf(`{ "type": "info", "message": "Processing ... %d%%" }%s`, i*100/options.size, lineSeparator)
 	}
 	fmt.Printf(`{ "type": "setenv", "message": "URL=https://magic.cloud/%s" }%s`, servicename, lineSeparator)
+	fmt.Printf(`{ "type": "rawsetenv", "message": "CLOUD_REGION=us-east-1" }%s`, lineSeparator)
 }
 
 func down(_ *cobra.Command, _ []string) {
 	fmt.Printf(`{ "type": "error", "message": "Permission error" }%s`, lineSeparator)
 }
 
-func metadataCommand(upCmd, downCmd *cobra.Command) *cobra.Command {
+func stop(_ *cobra.Command, _ []string) {
+	if marker := os.Getenv("PROVIDER_STOP_MARKER"); marker != "" {
+		_ = os.WriteFile(marker, []byte("stopped"), 0o600)
+	}
+}
+
+func metadataCommand(upCmd, downCmd, stopCmd *cobra.Command) *cobra.Command {
 	return &cobra.Command{
 		Use: "metadata",
 		Run: func(cmd *cobra.Command, _ []string) {
-			metadata(upCmd, downCmd)
+			metadata(upCmd, downCmd, stopCmd)
 		},
 		Args: cobra.NoArgs,
 	}
 }
 
-func metadata(upCmd, downCmd *cobra.Command) {
+func metadata(upCmd, downCmd, stopCmd *cobra.Command) {
 	metadata := ProviderMetadata{}
 	metadata.Description = "Manage services on AwesomeCloud"
 	metadata.Up = commandParameters(upCmd)
 	metadata.Down = commandParameters(downCmd)
+	stopParams := commandParameters(stopCmd)
+	metadata.Stop = &stopParams
 	jsonMetadata, err := json.Marshal(metadata)
 	if err != nil {
 		panic(err)
@@ -134,9 +149,10 @@ func commandParameters(cmd *cobra.Command) CommandMetadata {
 }
 
 type ProviderMetadata struct {
-	Description string          `json:"description"`
-	Up          CommandMetadata `json:"up"`
-	Down        CommandMetadata `json:"down"`
+	Description string           `json:"description"`
+	Up          CommandMetadata  `json:"up"`
+	Down        CommandMetadata  `json:"down"`
+	Stop        *CommandMetadata `json:"stop,omitempty"`
 }
 
 type CommandMetadata struct {

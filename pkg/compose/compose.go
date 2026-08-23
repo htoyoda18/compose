@@ -31,13 +31,10 @@ import (
 	"github.com/docker/cli/cli/config/configfile"
 	"github.com/docker/cli/cli/flags"
 	"github.com/docker/cli/cli/streams"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/swarm"
-	"github.com/docker/docker/api/types/volume"
-	"github.com/docker/docker/client"
 	"github.com/jonboulle/clockwork"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/swarm"
+	"github.com/moby/moby/client"
 	"github.com/sirupsen/logrus"
 
 	"github.com/docker/compose/v5/pkg/api"
@@ -218,6 +215,8 @@ type composeService struct {
 	clock          clockwork.Clock
 	maxConcurrency int
 	dryRun         bool
+
+	runtimeAPIVersion runtimeVersionCache
 }
 
 // Close releases any connections/resources held by the underlying clients.
@@ -366,17 +365,17 @@ func (s *composeService) projectFromName(containers Containers, projectName stri
 		return project, fmt.Errorf("no container found for project %q: %w", projectName, api.ErrNotFound)
 	}
 	set := types.Services{}
-	for _, c := range containers {
-		serviceLabel, ok := c.Labels[api.ServiceLabel]
+	for _, ctr := range containers {
+		serviceLabel, ok := ctr.Labels[api.ServiceLabel]
 		if !ok {
-			serviceLabel = getCanonicalContainerName(c)
+			serviceLabel = getCanonicalContainerName(ctr)
 		}
 		service, ok := set[serviceLabel]
 		if !ok {
 			service = types.ServiceConfig{
 				Name:   serviceLabel,
-				Image:  c.Image,
-				Labels: c.Labels,
+				Image:  ctr.Image,
+				Labels: ctr.Labels,
 			}
 		}
 		service.Scale = increment(service.Scale)
@@ -434,16 +433,16 @@ func increment(scale *int) *int {
 }
 
 func (s *composeService) actualVolumes(ctx context.Context, projectName string) (types.Volumes, error) {
-	opts := volume.ListOptions{
-		Filters: filters.NewArgs(projectFilter(projectName)),
+	options := client.VolumeListOptions{
+		Filters: projectFilter(projectName),
 	}
-	volumes, err := s.apiClient().VolumeList(ctx, opts)
+	volumes, err := s.apiClient().VolumeList(ctx, options)
 	if err != nil {
 		return nil, err
 	}
 
 	actual := types.Volumes{}
-	for _, vol := range volumes.Volumes {
+	for _, vol := range volumes.Items {
 		actual[vol.Labels[api.VolumeLabel]] = types.VolumeConfig{
 			Name:   vol.Name,
 			Driver: vol.Driver,
@@ -454,15 +453,15 @@ func (s *composeService) actualVolumes(ctx context.Context, projectName string) 
 }
 
 func (s *composeService) actualNetworks(ctx context.Context, projectName string) (types.Networks, error) {
-	networks, err := s.apiClient().NetworkList(ctx, network.ListOptions{
-		Filters: filters.NewArgs(projectFilter(projectName)),
+	networks, err := s.apiClient().NetworkList(ctx, client.NetworkListOptions{
+		Filters: projectFilter(projectName),
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	actual := types.Networks{}
-	for _, net := range networks {
+	for _, net := range networks.Items {
 		actual[net.Labels[api.NetworkLabel]] = types.NetworkConfig{
 			Name:   net.Name,
 			Driver: net.Driver,
@@ -478,13 +477,13 @@ var swarmEnabled = struct {
 	err  error
 }{}
 
-func (s *composeService) isSWarmEnabled(ctx context.Context) (bool, error) {
+func (s *composeService) isSwarmEnabled(ctx context.Context) (bool, error) {
 	swarmEnabled.once.Do(func() {
-		info, err := s.apiClient().Info(ctx)
+		res, err := s.apiClient().Info(ctx, client.InfoOptions{})
 		if err != nil {
 			swarmEnabled.err = err
 		}
-		switch info.Swarm.LocalNodeState {
+		switch res.Info.Swarm.LocalNodeState {
 		case swarm.LocalNodeStateInactive, swarm.LocalNodeStateLocked:
 			swarmEnabled.val = false
 		default:
@@ -494,21 +493,39 @@ func (s *composeService) isSWarmEnabled(ctx context.Context) (bool, error) {
 	return swarmEnabled.val, swarmEnabled.err
 }
 
+// runtimeVersionCache caches a version string after a successful lookup.
+// Errors (including context cancellation) are not cached so that
+// subsequent calls can retry with a fresh context.
 type runtimeVersionCache struct {
-	once sync.Once
-	val  string
-	err  error
+	mu  sync.Mutex
+	val string
 }
 
-var runtimeVersion runtimeVersionCache
+// RuntimeAPIVersion returns the negotiated API version that will be used for
+// requests to the Docker daemon. It triggers version negotiation via Ping so
+// that version-gated request shaping matches the version subsequent API calls
+// will actually use.
+//
+// After negotiation, Compose should never rely on features or request attributes
+// not defined by this API version, even if the daemon's raw version is higher.
+func (s *composeService) RuntimeAPIVersion(ctx context.Context) (string, error) {
+	s.runtimeAPIVersion.mu.Lock()
+	defer s.runtimeAPIVersion.mu.Unlock()
+	if s.runtimeAPIVersion.val != "" {
+		return s.runtimeAPIVersion.val, nil
+	}
 
-func (s *composeService) RuntimeVersion(ctx context.Context) (string, error) {
-	runtimeVersion.once.Do(func() {
-		version, err := s.apiClient().ServerVersion(ctx)
-		if err != nil {
-			runtimeVersion.err = err
-		}
-		runtimeVersion.val = version.APIVersion
-	})
-	return runtimeVersion.val, runtimeVersion.err
+	cli := s.apiClient()
+	_, err := cli.Ping(ctx, client.PingOptions{NegotiateAPIVersion: true})
+	if err != nil {
+		return "", err
+	}
+
+	version := cli.ClientVersion()
+	if version == "" {
+		return "", fmt.Errorf("docker client returned empty version after successful API negotiation")
+	}
+
+	s.runtimeAPIVersion.val = version
+	return s.runtimeAPIVersion.val, nil
 }

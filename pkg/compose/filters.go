@@ -18,40 +18,47 @@ package compose
 
 import (
 	"fmt"
+	"strconv"
 
-	"github.com/docker/docker/api/types/filters"
+	"github.com/moby/moby/client"
 
 	"github.com/docker/compose/v5/pkg/api"
 )
 
-func projectFilter(projectName string) filters.KeyValuePair {
-	return filters.Arg("label", fmt.Sprintf("%s=%s", api.ProjectLabel, projectName))
+// labelFilter returns a label filter string of the form "key=value".
+func labelFilter(key, value string) string {
+	return fmt.Sprintf("%s=%s", key, value)
 }
 
-func serviceFilter(serviceName string) filters.KeyValuePair {
-	return filters.Arg("label", fmt.Sprintf("%s=%s", api.ServiceLabel, serviceName))
+func projectFilter(projectName string) client.Filters {
+	return make(client.Filters).Add("label", labelFilter(api.ProjectLabel, projectName))
 }
 
-func networkFilter(name string) filters.KeyValuePair {
-	return filters.Arg("label", fmt.Sprintf("%s=%s", api.NetworkLabel, name))
+func serviceFilter(serviceName string) string {
+	return labelFilter(api.ServiceLabel, serviceName)
 }
 
-func oneOffFilter(b bool) filters.KeyValuePair {
+func networkFilter(name string) string {
+	return labelFilter(api.NetworkLabel, name)
+}
+
+func oneOffFilter(b bool) string {
 	v := "False"
 	if b {
 		v = "True"
 	}
-	return filters.Arg("label", fmt.Sprintf("%s=%s", api.OneoffLabel, v))
+	return labelFilter(api.OneoffLabel, v)
 }
 
-func containerNumberFilter(index int) filters.KeyValuePair {
-	return filters.Arg("label", fmt.Sprintf("%s=%d", api.ContainerNumberLabel, index))
+func containerNumberFilter(index int) string {
+	return labelFilter(api.ContainerNumberLabel, strconv.Itoa(index))
 }
 
-func hasProjectLabelFilter() filters.KeyValuePair {
-	return filters.Arg("label", api.ProjectLabel)
-}
-
-func hasConfigHashLabel() filters.KeyValuePair {
-	return filters.Arg("label", api.ConfigHashLabel)
+// hookFilter returns a label filter that matches containers by hook type
+// (stored in api.HookLabel). hookType is parametric for future hook types
+// (e.g. post_start); today all callers pass preStartHookType.
+//
+//nolint:unparam
+func hookFilter(hookType string) string {
+	return labelFilter(api.HookLabel, hookType)
 }

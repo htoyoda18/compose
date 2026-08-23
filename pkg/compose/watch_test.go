@@ -15,19 +15,21 @@
 package compose
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/cli/cli/streams"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
 	"github.com/jonboulle/clockwork"
-	"github.com/stretchr/testify/require"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/image"
+	"github.com/moby/moby/client"
 	"go.uber.org/mock/gomock"
 	"gotest.tools/v3/assert"
 
@@ -77,25 +79,28 @@ func TestWatch_Sync(t *testing.T) {
 	cli := mocks.NewMockCli(mockCtrl)
 	cli.EXPECT().Err().Return(streams.NewOut(os.Stderr)).AnyTimes()
 	apiClient := mocks.NewMockAPIClient(mockCtrl)
-	apiClient.EXPECT().ContainerList(gomock.Any(), gomock.Any()).Return([]container.Summary{
-		testContainer("test", "123", false),
+	apiClient.EXPECT().ContainerList(gomock.Any(), gomock.Any()).Return(client.ContainerListResult{
+		Items: []container.Summary{
+			testContainer("test", "123", false),
+		},
 	}, nil).AnyTimes()
 	// we expect the image to be pruned
-	apiClient.EXPECT().ImageList(gomock.Any(), image.ListOptions{
-		Filters: filters.NewArgs(
-			filters.Arg("dangling", "true"),
-			filters.Arg("label", api.ProjectLabel+"=myProjectName"),
-		),
-	}).Return([]image.Summary{
-		{ID: "123"},
-		{ID: "456"},
+	apiClient.EXPECT().ImageList(gomock.Any(), client.ImageListOptions{
+		Filters: make(client.Filters).
+			Add("dangling", "true").
+			Add("label", api.ProjectLabel+"=myProjectName"),
+	}).Return(client.ImageListResult{
+		Items: []image.Summary{
+			{ID: "123"},
+			{ID: "456"},
+		},
 	}, nil).Times(1)
-	apiClient.EXPECT().ImageRemove(gomock.Any(), "123", image.RemoveOptions{}).Times(1)
-	apiClient.EXPECT().ImageRemove(gomock.Any(), "456", image.RemoveOptions{}).Times(1)
+	apiClient.EXPECT().ImageRemove(gomock.Any(), "123", client.ImageRemoveOptions{}).Times(1)
+	apiClient.EXPECT().ImageRemove(gomock.Any(), "456", client.ImageRemoveOptions{}).Times(1)
 	//
 	cli.EXPECT().Client().Return(apiClient).AnyTimes()
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
+	ctx, cancelFunc := context.WithCancel(t.Context())
 	t.Cleanup(cancelFunc)
 
 	proj := types.Project{
@@ -150,10 +155,14 @@ func TestWatch_Sync(t *testing.T) {
 	clock.Advance(watch.QuietPeriod)
 	select {
 	case actual := <-syncer.synced:
-		require.ElementsMatch(t, []*sync.PathMapping{
+		expected := []*sync.PathMapping{
 			{HostPath: "/sync/changed", ContainerPath: "/work/changed"},
 			{HostPath: "/sync/changed/sub", ContainerPath: "/work/changed/sub"},
-		}, actual)
+		}
+		slices.SortFunc(actual, func(a, b *sync.PathMapping) int {
+			return cmp.Compare(a.HostPath, b.HostPath)
+		})
+		assert.DeepEqual(t, expected, actual)
 	case <-time.After(100 * time.Millisecond):
 		t.Error("timeout")
 	}
@@ -185,4 +194,75 @@ func newFakeSyncer() *fakeSyncer {
 func (f *fakeSyncer) Sync(ctx context.Context, service string, paths []*sync.PathMapping) error {
 	f.synced <- paths
 	return nil
+}
+
+// #13725: initialSyncFiles used to skip files whose mtime predated the image
+// creation time, which silently dropped all pre-existing host files.
+func TestInitialSyncFilesDirectory(t *testing.T) {
+	hostDir := t.TempDir()
+	hostFile := filepath.Join(hostDir, "test.txt")
+	assert.NilError(t, os.WriteFile(hostFile, []byte("hello"), 0o600))
+	// back-date the file to simulate a file that predates the image
+	oldTime := time.Now().Add(-time.Hour)
+	assert.NilError(t, os.Chtimes(hostFile, oldTime, oldTime))
+
+	paths, err := (&composeService{}).initialSyncFiles(types.ServiceConfig{Name: "svc"}, types.Trigger{
+		Path:   hostDir,
+		Target: "/app/src",
+	}, watch.EmptyMatcher{})
+	assert.NilError(t, err)
+	assert.DeepEqual(t, paths, []*sync.PathMapping{{
+		HostPath:      hostFile,
+		ContainerPath: "/app/src/test.txt",
+	}})
+}
+
+// #13725: single-file trigger path was also gated on the image-creation-time
+// check, preventing pre-existing files from being synced.
+func TestInitialSyncFilesRegularFile(t *testing.T) {
+	hostDir := t.TempDir()
+	hostFile := filepath.Join(hostDir, "test.txt")
+	assert.NilError(t, os.WriteFile(hostFile, []byte("hello"), 0o600))
+	oldTime := time.Now().Add(-time.Hour)
+	assert.NilError(t, os.Chtimes(hostFile, oldTime, oldTime))
+
+	syncer := &fakeSyncer{synced: make(chan []*sync.PathMapping, 1)}
+	err := (&composeService{}).initialSync(t.Context(), types.ServiceConfig{
+		Name:  "svc",
+		Build: &types.BuildConfig{Context: hostDir},
+	}, types.Trigger{
+		Path:   hostFile,
+		Target: "/app/test.txt",
+	}, syncer)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, <-syncer.synced, []*sync.PathMapping{{
+		HostPath:      hostFile,
+		ContainerPath: "/app/test.txt",
+	}})
+}
+
+// TestPruneDanglingImagesOnRebuild verifies the post-rebuild prune only
+// removes superseded dangling images: a dangling image whose ID matches one
+// of the freshly built images must be spared. The lookup used to probe the
+// name-keyed map with an image ID, matching nothing — every dangling image
+// of the project was removed on each rebuild.
+func TestPruneDanglingImagesOnRebuild(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	apiMock, cli := prepareMocks(mockCtrl)
+	tested, err := NewComposeService(cli)
+	assert.NilError(t, err)
+
+	apiMock.EXPECT().ImageList(gomock.Any(), gomock.Any()).
+		Return(client.ImageListResult{Items: []image.Summary{
+			{ID: "sha256:justbuilt"},
+			{ID: "sha256:superseded"},
+		}}, nil)
+	// only the superseded image may be removed; removing the just-built one
+	// would be an unexpected call and fail the test
+	apiMock.EXPECT().ImageRemove(gomock.Any(), "sha256:superseded", gomock.Any()).
+		Return(client.ImageRemoveResult{}, nil)
+
+	tested.(*composeService).pruneDanglingImagesOnRebuild(t.Context(), "proj",
+		map[string]string{"app-image:latest": "sha256:justbuilt"})
 }

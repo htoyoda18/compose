@@ -20,10 +20,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/containerd/containerd/v2/core/images"
@@ -32,6 +34,7 @@ import (
 	"github.com/docker/cli/cli/command"
 	spec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	"github.com/docker/compose/v5/internal/desktop"
 	"github.com/docker/compose/v5/internal/oci"
 	"github.com/docker/compose/v5/pkg/api"
 )
@@ -42,7 +45,7 @@ const (
 )
 
 // validatePathInBase ensures a file path is contained within the base directory,
-// as OCI artifacts resources must all live within the same folder.
+// as OCI artifact resources must all live within the same folder.
 func validatePathInBase(base, unsafePath string) error {
 	// Reject paths with path separators regardless of OS
 	if strings.ContainsAny(unsafePath, "\\/") {
@@ -79,7 +82,7 @@ func ociRemoteLoaderEnabled() (bool, error) {
 }
 
 func NewOCIRemoteLoader(dockerCli command.Cli, offline bool, options api.OCIOptions) loader.ResourceLoader {
-	return ociRemoteLoader{
+	return &ociRemoteLoader{
 		dockerCli:          dockerCli,
 		offline:            offline,
 		known:              map[string]string{},
@@ -92,14 +95,25 @@ type ociRemoteLoader struct {
 	offline            bool
 	known              map[string]string
 	insecureRegistries []string
+
+	// HTTP transport for the OCI resolver, initialized lazily so DD
+	// detection happens once per loader rather than per Load() call.
+	transportOnce sync.Once
+	transport     http.RoundTripper
 }
 
-func (g ociRemoteLoader) Accept(path string) bool {
+func (g *ociRemoteLoader) httpTransport(ctx context.Context) http.RoundTripper {
+	g.transportOnce.Do(func() {
+		g.transport = desktop.ProxyTransportFor(ctx, g.dockerCli.Client())
+	})
+	return g.transport
+}
+
+func (g *ociRemoteLoader) Accept(path string) bool {
 	return strings.HasPrefix(path, OciPrefix)
 }
 
-//nolint:gocyclo
-func (g ociRemoteLoader) Load(ctx context.Context, path string) (string, error) {
+func (g *ociRemoteLoader) Load(ctx context.Context, path string) (string, error) {
 	enabled, err := ociRemoteLoaderEnabled()
 	if err != nil {
 		return "", err
@@ -114,76 +128,97 @@ func (g ociRemoteLoader) Load(ctx context.Context, path string) (string, error) 
 
 	local, ok := g.known[path]
 	if !ok {
-		ref, err := reference.ParseDockerRef(path[len(OciPrefix):])
+		local, err = g.pullComposeArtifact(ctx, path)
 		if err != nil {
 			return "", err
-		}
-
-		resolver := oci.NewResolver(g.dockerCli.ConfigFile(), g.insecureRegistries...)
-
-		descriptor, content, err := oci.Get(ctx, resolver, ref)
-		if err != nil {
-			return "", fmt.Errorf("failed to pull OCI resource %q: %w", ref, err)
-		}
-
-		cache, err := cacheDir()
-		if err != nil {
-			return "", fmt.Errorf("initializing remote resource cache: %w", err)
-		}
-
-		local = filepath.Join(cache, descriptor.Digest.Hex())
-		if _, err = os.Stat(local); os.IsNotExist(err) {
-
-			// a Compose application bundle is published as image index
-			if images.IsIndexType(descriptor.MediaType) {
-				var index spec.Index
-				err = json.Unmarshal(content, &index)
-				if err != nil {
-					return "", err
-				}
-				found := false
-				for _, manifest := range index.Manifests {
-					if manifest.ArtifactType != oci.ComposeProjectArtifactType {
-						continue
-					}
-					found = true
-					digested, err := reference.WithDigest(ref, manifest.Digest)
-					if err != nil {
-						return "", err
-					}
-					descriptor, content, err = oci.Get(ctx, resolver, digested)
-					if err != nil {
-						return "", fmt.Errorf("failed to pull OCI resource %q: %w", ref, err)
-					}
-				}
-				if !found {
-					return "", fmt.Errorf("OCI index %s doesn't refer to compose artifacts", ref)
-				}
-			}
-
-			var manifest spec.Manifest
-			err = json.Unmarshal(content, &manifest)
-			if err != nil {
-				return "", err
-			}
-
-			err = g.pullComposeFiles(ctx, local, manifest, ref, resolver)
-			if err != nil {
-				// we need to clean up the directory to be sure we won't let empty files present
-				_ = os.RemoveAll(local)
-				return "", err
-			}
 		}
 		g.known[path] = local
 	}
 	return filepath.Join(local, "compose.yaml"), nil
 }
 
-func (g ociRemoteLoader) Dir(path string) string {
+// pullComposeArtifact resolves an oci:// path and pulls the compose artifact
+// files into the local cache, unless already cached
+func (g *ociRemoteLoader) pullComposeArtifact(ctx context.Context, path string) (string, error) {
+	ref, err := reference.ParseDockerRef(path[len(OciPrefix):])
+	if err != nil {
+		return "", err
+	}
+
+	resolver := oci.NewResolver(g.dockerCli.ConfigFile(), g.httpTransport(ctx), g.insecureRegistries...)
+
+	descriptor, content, err := oci.Get(ctx, resolver, ref)
+	if err != nil {
+		return "", fmt.Errorf("failed to pull OCI resource %q: %w", ref, err)
+	}
+
+	cache, err := cacheDir()
+	if err != nil {
+		return "", fmt.Errorf("initializing remote resource cache: %w", err)
+	}
+
+	local := filepath.Join(cache, descriptor.Digest.Hex())
+	if _, err = os.Stat(local); !os.IsNotExist(err) {
+		return local, nil
+	}
+
+	// a Compose application bundle is published as an image index
+	if images.IsIndexType(descriptor.MediaType) {
+		content, err = g.resolveComposeManifest(ctx, resolver, ref, content)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	var manifest spec.Manifest
+	err = json.Unmarshal(content, &manifest)
+	if err != nil {
+		return "", err
+	}
+
+	err = g.pullComposeFiles(ctx, local, manifest, ref, resolver)
+	if err != nil {
+		// we need to clean up the directory to be sure we won't leave empty files behind
+		_ = os.RemoveAll(local)
+		return "", err
+	}
+	return local, nil
+}
+
+// resolveComposeManifest returns the content of the compose artifact manifest
+// referenced by an image index
+func (g *ociRemoteLoader) resolveComposeManifest(ctx context.Context, resolver remotes.Resolver, ref reference.Named, content []byte) ([]byte, error) {
+	var index spec.Index
+	err := json.Unmarshal(content, &index)
+	if err != nil {
+		return nil, err
+	}
+	found := false
+	for _, manifest := range index.Manifests {
+		if manifest.ArtifactType != oci.ComposeProjectArtifactType {
+			continue
+		}
+		found = true
+		digested, err := reference.WithDigest(ref, manifest.Digest)
+		if err != nil {
+			return nil, err
+		}
+		_, content, err = oci.Get(ctx, resolver, digested)
+		if err != nil {
+			return nil, fmt.Errorf("failed to pull OCI resource %q: %w", ref, err)
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("OCI index %s doesn't refer to compose artifacts", ref)
+	}
+	return content, nil
+}
+
+func (g *ociRemoteLoader) Dir(path string) string {
 	return g.known[path]
 }
 
-func (g ociRemoteLoader) pullComposeFiles(ctx context.Context, local string, manifest spec.Manifest, ref reference.Named, resolver remotes.Resolver) error {
+func (g *ociRemoteLoader) pullComposeFiles(ctx context.Context, local string, manifest spec.Manifest, ref reference.Named, resolver remotes.Resolver) error {
 	err := os.MkdirAll(local, 0o700)
 	if err != nil {
 		return err
@@ -194,12 +229,7 @@ func (g ociRemoteLoader) pullComposeFiles(ctx context.Context, local string, man
 	}
 
 	for i, layer := range manifest.Layers {
-		digested, err := reference.WithDigest(ref, layer.Digest)
-		if err != nil {
-			return err
-		}
-
-		_, content, err := oci.Get(ctx, resolver, digested)
+		content, err := oci.GetBlob(ctx, resolver, ref, layer)
 		if err != nil {
 			return err
 		}
@@ -259,4 +289,4 @@ func writeEnvFile(layer spec.Descriptor, local string, content []byte) error {
 	return err
 }
 
-var _ loader.ResourceLoader = ociRemoteLoader{}
+var _ loader.ResourceLoader = (*ociRemoteLoader)(nil)

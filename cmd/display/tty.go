@@ -21,9 +21,11 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/buger/goterm"
 	"github.com/docker/go-units"
@@ -35,13 +37,14 @@ import (
 
 // Full creates an EventProcessor that render advanced UI within a terminal.
 // On Start, TUI lists task with a progress timer
-func Full(out io.Writer, info io.Writer) api.EventProcessor {
+func Full(out io.Writer, info io.Writer, detached bool) api.EventProcessor {
 	return &ttyWriter{
-		out:   out,
-		info:  info,
-		tasks: map[string]*task{},
-		done:  make(chan bool),
-		mtx:   &sync.Mutex{},
+		out:      out,
+		info:     info,
+		tasks:    map[string]*task{},
+		done:     make(chan bool),
+		mtx:      &sync.Mutex{},
+		detached: detached,
 	}
 }
 
@@ -58,6 +61,7 @@ type ttyWriter struct {
 	ticker    *time.Ticker
 	suspended bool
 	info      io.Writer
+	detached  bool
 }
 
 type task struct {
@@ -116,7 +120,7 @@ func (t *task) update(e api.Resource) {
 			t.stop()
 		}
 	case api.Working:
-		t.hasMore()
+		t.spinner.Restart()
 	}
 	t.status = e.Status
 	t.text = e.Text
@@ -136,10 +140,6 @@ func (t *task) update(e api.Resource) {
 func (t *task) stop() {
 	t.endTime = time.Now()
 	t.spinner.Stop()
-}
-
-func (t *task) hasMore() {
-	t.spinner.Restart()
 }
 
 func (t *task) Completed() bool {
@@ -172,11 +172,13 @@ func (w *ttyWriter) Start(ctx context.Context, operation string) {
 
 func (w *ttyWriter) Done(operation string, success bool) {
 	w.print()
+	w.done <- true
 	w.mtx.Lock()
 	defer w.mtx.Unlock()
-	w.ticker.Stop()
+	if w.ticker != nil {
+		w.ticker.Stop()
+	}
 	w.operation = ""
-	w.done <- true
 }
 
 func (w *ttyWriter) On(events ...api.Resource) {
@@ -188,7 +190,7 @@ func (w *ttyWriter) On(events ...api.Resource) {
 			continue
 		}
 
-		if w.operation != "start" && (e.Text == api.StatusStarted || e.Text == api.StatusStarting) {
+		if w.operation != "start" && (e.Text == api.StatusStarted || e.Text == api.StatusStarting) && !w.detached {
 			// skip those events to avoid mix with container logs
 			continue
 		}
@@ -198,12 +200,14 @@ func (w *ttyWriter) On(events ...api.Resource) {
 
 func (w *ttyWriter) event(e api.Resource) {
 	// Suspend print while a build is in progress, to avoid collision with buildkit Display
-	if e.Text == api.StatusBuilding {
-		w.ticker.Stop()
-		w.suspended = true
-	} else if w.suspended {
-		w.ticker.Reset(100 * time.Millisecond)
-		w.suspended = false
+	if w.ticker != nil {
+		if e.Text == api.StatusBuilding {
+			w.ticker.Stop()
+			w.suspended = true
+		} else if w.suspended {
+			w.ticker.Reset(100 * time.Millisecond)
+			w.suspended = false
+		}
 	}
 
 	if last, ok := w.tasks[e.ID]; ok {
@@ -258,13 +262,40 @@ func (w *ttyWriter) childrenTasks(parent string) iter.Seq[*task] {
 	}
 }
 
+// lineData holds pre-computed formatting for a task line
+type lineData struct {
+	spinner           string // rendered spinner with color
+	prefix            string // dry-run prefix if any
+	taskID            string // possibly abbreviated
+	progress          string // progress bar and (optionally) size info appended
+	progressSizeBytes int    // byte length of the trailing size suffix in progress, 0 if none
+	status            string // rendered status with color
+	details           string // possibly abbreviated
+	timer             string // rendered timer with color
+	statusPad         int    // padding before status to align
+	timerPad          int    // padding before timer to align
+	statusColor       colorFunc
+}
+
 func (w *ttyWriter) print() {
+	terminalWidth := goterm.Width()
+	terminalHeight := goterm.Height()
+	if terminalWidth <= 0 {
+		terminalWidth = 80
+	}
+	if terminalHeight <= 0 {
+		terminalHeight = 24
+	}
+	w.printWithDimensions(terminalWidth, terminalHeight)
+}
+
+func (w *ttyWriter) printWithDimensions(terminalWidth, terminalHeight int) {
 	w.mtx.Lock()
 	defer w.mtx.Unlock()
 	if len(w.tasks) == 0 {
 		return
 	}
-	terminalWidth := goterm.Width()
+
 	up := w.numLines + 1
 	if !w.repeated {
 		up--
@@ -283,39 +314,234 @@ func (w *ttyWriter) print() {
 	firstLine := fmt.Sprintf("[+] %s %d/%d", w.operation, numDone(w.tasks), len(w.tasks))
 	_, _ = fmt.Fprintln(w.out, firstLine)
 
-	var statusPadding int
-	for _, t := range w.tasks {
-		l := len(t.ID)
-		if len(t.parents) == 0 && statusPadding < l {
-			statusPadding = l
+	// Collect parent tasks in original order
+	allTasks := slices.Collect(w.parentTasks())
+
+	// Available lines: terminal height - 2 (header line + potential "more" line)
+	maxLines := max(terminalHeight-2, 1)
+
+	showMore := len(allTasks) > maxLines
+	tasksToShow := allTasks
+	if showMore {
+		tasksToShow = allTasks[:maxLines-1] // Reserve one line for "more" message
+	}
+
+	// collect line data and compute timerLen
+	lines := make([]lineData, len(tasksToShow))
+	var timerLen int
+	for i, t := range tasksToShow {
+		lines[i] = w.prepareLineData(t)
+		if len(lines[i].timer) > timerLen {
+			timerLen = len(lines[i].timer)
 		}
 	}
 
-	skipChildEvents := len(w.tasks) > goterm.Height()-2
-	numLines := 0
-	for t := range w.parentTasks() {
-		line := w.lineText(t, "", terminalWidth, statusPadding, w.dryRun)
-		_, _ = fmt.Fprint(w.out, line)
-		numLines++
-		if skipChildEvents {
+	// pad timers so they all have the same visible width
+	for i := range lines {
+		l := &lines[i]
+		if l.timer == "" {
 			continue
 		}
-		for child := range w.childrenTasks(t.ID) {
-			line := w.lineText(child, "  ", terminalWidth, statusPadding-2, w.dryRun)
-			_, _ = fmt.Fprint(w.out, line)
-			numLines++
+		timerWidth := utf8.RuneCountInString(l.timer)
+		if timerWidth < timerLen {
+			// Left-pad so the timer's right edge stays aligned on the terminal.
+			// This also prevents stale suffix characters from visually “sticking”
+			// when a previously-rendered timer was wider (e.g. "10.6s" -> "0.0s").
+			l.timer = strings.Repeat(" ", timerLen-timerWidth) + l.timer
 		}
 	}
+
+	// shorten details/taskID to fit terminal width
+	w.adjustLineWidth(lines, timerLen, terminalWidth)
+
+	// compute padding
+	w.applyPadding(lines, terminalWidth, timerLen)
+
+	// Render lines
+	numLines := 0
+	for _, l := range lines {
+		_, _ = fmt.Fprint(w.out, lineText(l))
+		numLines++
+	}
+
+	if showMore {
+		moreCount := len(allTasks) - len(tasksToShow)
+		moreText := fmt.Sprintf(" ... %d more", moreCount)
+		pad := max(terminalWidth-len(moreText), 0)
+		_, _ = fmt.Fprintf(w.out, "%s%s\n", moreText, strings.Repeat(" ", pad))
+		numLines++
+	}
+
+	// Clear any remaining lines from previous render
 	for i := numLines; i < w.numLines; i++ {
-		if numLines < goterm.Height()-2 {
-			_, _ = fmt.Fprintln(w.out, strings.Repeat(" ", terminalWidth))
-			numLines++
-		}
+		_, _ = fmt.Fprintln(w.out, strings.Repeat(" ", terminalWidth))
+		numLines++
 	}
 	w.numLines = numLines
 }
 
-func (w *ttyWriter) lineText(t *task, pad string, terminalWidth, statusPadding int, dryRun bool) string {
+func (w *ttyWriter) applyPadding(lines []lineData, terminalWidth int, timerLen int) {
+	var maxBeforeStatus int
+	for i := range lines {
+		l := &lines[i]
+		// Width before statusPad: space(1) + spinner(1) + prefix + space(1) + taskID + progress
+		beforeStatus := 3 + lenAnsi(l.prefix) + utf8.RuneCountInString(l.taskID) + lenAnsi(l.progress)
+		if beforeStatus > maxBeforeStatus {
+			maxBeforeStatus = beforeStatus
+		}
+	}
+
+	for i, l := range lines {
+		// Position before statusPad: space(1) + spinner(1) + prefix + space(1) + taskID + progress
+		beforeStatus := 3 + lenAnsi(l.prefix) + utf8.RuneCountInString(l.taskID) + lenAnsi(l.progress)
+		// statusPad aligns status; lineText adds 1 more space after statusPad
+		l.statusPad = maxBeforeStatus - beforeStatus
+
+		// Format: beforeStatus + statusPad + space(1) + status
+		lineLen := beforeStatus + l.statusPad + 1 + utf8.RuneCountInString(l.status)
+		if l.details != "" {
+			lineLen += 1 + utf8.RuneCountInString(l.details)
+		}
+		l.timerPad = max(terminalWidth-lineLen-timerLen, 1)
+		lines[i] = l
+
+	}
+}
+
+func (w *ttyWriter) adjustLineWidth(lines []lineData, timerLen int, terminalWidth int) {
+	const minIDLen = 10
+	maxStatusLen := maxStatusLength(lines)
+
+	// Iteratively truncate until all lines fit
+	for range 100 { // safety limit
+		maxBeforeStatus := maxBeforeStatusWidth(lines)
+		overflow := computeOverflow(lines, maxBeforeStatus, maxStatusLen, timerLen, terminalWidth)
+
+		if overflow <= 0 {
+			break
+		}
+
+		// Drop ancillary content (details, progress size info) before touching the taskID.
+		if !truncateDetails(lines, overflow) && !truncateProgressSize(lines) && !truncateLongestTaskID(lines, overflow, minIDLen) {
+			break // Can't truncate further
+		}
+	}
+}
+
+// maxStatusLength returns the maximum status text length across all lines.
+func maxStatusLength(lines []lineData) int {
+	var maxLen int
+	for i := range lines {
+		if len(lines[i].status) > maxLen {
+			maxLen = len(lines[i].status)
+		}
+	}
+	return maxLen
+}
+
+// maxBeforeStatusWidth computes the maximum width before statusPad across all lines.
+// This is: space(1) + spinner(1) + prefix + space(1) + taskID + progress
+func maxBeforeStatusWidth(lines []lineData) int {
+	var maxWidth int
+	for i := range lines {
+		l := &lines[i]
+		width := 3 + lenAnsi(l.prefix) + utf8.RuneCountInString(l.taskID) + lenAnsi(l.progress)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+	return maxWidth
+}
+
+// computeOverflow calculates how many characters the widest line exceeds the terminal width.
+// Returns 0 or negative if all lines fit.
+func computeOverflow(lines []lineData, maxBeforeStatus, maxStatusLen, timerLen, terminalWidth int) int {
+	var maxOverflow int
+	for i := range lines {
+		l := &lines[i]
+		detailsLen := len(l.details)
+		if detailsLen > 0 {
+			detailsLen++ // space before details
+		}
+		// Line width: maxBeforeStatus + space(1) + status + details + minTimerPad(1) + timer
+		lineWidth := maxBeforeStatus + 1 + maxStatusLen + detailsLen + 1 + timerLen
+		overflow := lineWidth - terminalWidth
+		if overflow > maxOverflow {
+			maxOverflow = overflow
+		}
+	}
+	return maxOverflow
+}
+
+// truncateProgressSize drops the trailing "X.XMB / Y.YMB" size info from the
+// line currently driving maxBeforeStatusWidth — only that line's shrink can
+// reduce overflow. Returns true if any line was modified.
+func truncateProgressSize(lines []lineData) bool {
+	maxIdx := -1
+	var maxWidth int
+	for i := range lines {
+		l := &lines[i]
+		if l.progressSizeBytes == 0 {
+			continue
+		}
+		w := lenAnsi(l.prefix) + utf8.RuneCountInString(l.taskID) + lenAnsi(l.progress)
+		if maxIdx < 0 || w > maxWidth {
+			maxWidth = w
+			maxIdx = i
+		}
+	}
+	if maxIdx < 0 {
+		return false
+	}
+	l := &lines[maxIdx]
+	l.progress = l.progress[:len(l.progress)-l.progressSizeBytes]
+	l.progressSizeBytes = 0
+	return true
+}
+
+// truncateDetails tries to truncate the first line's details to reduce overflow.
+// Returns true if any truncation was performed.
+func truncateDetails(lines []lineData, overflow int) bool {
+	for i := range lines {
+		l := &lines[i]
+		if len(l.details) > 3 {
+			reduction := min(overflow, len(l.details)-3)
+			l.details = l.details[:len(l.details)-reduction-3] + "..."
+			return true
+		} else if l.details != "" {
+			l.details = ""
+			return true
+		}
+	}
+	return false
+}
+
+// truncateLongestTaskID truncates the longest taskID to reduce overflow.
+// Returns true if truncation was performed. Lengths and slicing are in runes
+// to avoid emitting invalid UTF-8 when taskID contains multi-byte chars.
+func truncateLongestTaskID(lines []lineData, overflow, minIDLen int) bool {
+	longestIdx := -1
+	longestLen := minIDLen
+	for i := range lines {
+		if utf8.RuneCountInString(lines[i].taskID) > longestLen {
+			longestLen = utf8.RuneCountInString(lines[i].taskID)
+			longestIdx = i
+		}
+	}
+
+	if longestIdx < 0 {
+		return false
+	}
+
+	l := &lines[longestIdx]
+	reduction := overflow + 3 // account for "..."
+	newLen := max(longestLen-reduction, minIDLen-3)
+	runes := []rune(l.taskID)
+	l.taskID = string(runes[:newLen]) + "..."
+	return true
+}
+
+func (w *ttyWriter) prepareLineData(t *task) lineData {
 	endTime := time.Now()
 	if t.status != api.Working {
 		endTime = t.startTime
@@ -323,8 +549,9 @@ func (w *ttyWriter) lineText(t *task, pad string, terminalWidth, statusPadding i
 			endTime = t.endTime
 		}
 	}
+
 	prefix := ""
-	if dryRun {
+	if w.dryRun {
 		prefix = PrefixColor(DRYRUN_PREFIX)
 	}
 
@@ -338,67 +565,66 @@ func (w *ttyWriter) lineText(t *task, pad string, terminalWidth, statusPadding i
 	)
 
 	// only show the aggregated progress while the root operation is in-progress
-	if parent := t; parent.status == api.Working {
-		for child := range w.childrenTasks(parent.ID) {
+	if t.status == api.Working {
+		for child := range w.childrenTasks(t.ID) {
 			if child.status == api.Working && child.total == 0 {
-				// we don't have totals available for all the child events
-				// so don't show the total progress yet
 				hideDetails = true
 			}
 			total += child.total
 			current += child.current
 			r := len(percentChars) - 1
-			p := child.percent
-			if p > 100 {
-				p = 100
-			}
+			p := min(child.percent, 100)
 			completion = append(completion, percentChars[r*p/100])
 		}
 	}
 
-	// don't try to show detailed progress if we don't have any idea
 	if total == 0 {
 		hideDetails = true
 	}
 
-	txt := t.ID
+	var progress string
+	var progressSizeBytes int
 	if len(completion) > 0 {
-		var progress string
+		progress = " [" + SuccessColor(strings.Join(completion, "")) + "]"
 		if !hideDetails {
-			progress = fmt.Sprintf(" %7s / %-7s", units.HumanSize(float64(current)), units.HumanSize(float64(total)))
+			sizeInfo := fmt.Sprintf(" %7s / %-7s", units.HumanSize(float64(current)), units.HumanSize(float64(total)))
+			progress += sizeInfo
+			progressSizeBytes = len(sizeInfo)
 		}
-		txt = fmt.Sprintf("%s [%s]%s",
-			t.ID,
-			SuccessColor(strings.Join(completion, "")),
-			progress,
-		)
 	}
-	textLen := len(txt)
-	padding := statusPadding - textLen
-	if padding < 0 {
-		padding = 0
-	}
-	// calculate the max length for the status text, on errors it
-	// is 2-3 lines long and breaks the line formatting
-	maxDetailsLen := terminalWidth - textLen - statusPadding - 15
-	details := t.details
-	// in some cases (debugging under VS Code), terminalWidth is set to zero by goterm.Width() ; ensuring we don't tweak strings with negative char index
-	if maxDetailsLen > 0 && len(details) > maxDetailsLen {
-		details = details[:maxDetailsLen] + "..."
-	}
-	text := fmt.Sprintf("%s %s%s %s %s%s %s",
-		pad,
-		spinner(t),
-		prefix,
-		txt,
-		strings.Repeat(" ", padding),
-		colorFn(t.status)(t.text),
-		details,
-	)
-	timer := fmt.Sprintf("%.1fs ", elapsed)
-	o := align(text, TimerColor(timer), terminalWidth)
 
-	return o
+	return lineData{
+		spinner:           spinner(t),
+		prefix:            prefix,
+		taskID:            t.ID,
+		progress:          progress,
+		progressSizeBytes: progressSizeBytes,
+		status:            t.text,
+		statusColor:       colorFn(t.status),
+		details:           t.details,
+		timer:             fmt.Sprintf("%.1fs", elapsed),
+	}
+}
+
+func lineText(l lineData) string {
+	var sb strings.Builder
+	sb.WriteString(" ")
+	sb.WriteString(l.spinner)
+	sb.WriteString(l.prefix)
+	sb.WriteString(" ")
+	sb.WriteString(l.taskID)
+	sb.WriteString(l.progress)
+	sb.WriteString(strings.Repeat(" ", l.statusPad))
+	sb.WriteString(" ")
+	sb.WriteString(l.statusColor(l.status))
+	if l.details != "" {
+		sb.WriteString(" ")
+		sb.WriteString(l.details)
+	}
+	sb.WriteString(strings.Repeat(" ", l.timerPad))
+	sb.WriteString(TimerColor(l.timer))
+	sb.WriteString("\n")
+	return sb.String()
 }
 
 var (
@@ -441,17 +667,6 @@ func numDone(tasks map[string]*task) int {
 		}
 	}
 	return i
-}
-
-func align(l, r string, w int) string {
-	ll := lenAnsi(l)
-	lr := lenAnsi(r)
-	pad := ""
-	count := w - ll - lr
-	if count > 0 {
-		pad = strings.Repeat(" ", count)
-	}
-	return fmt.Sprintf("%s%s%s\n", l, pad, r)
 }
 
 // lenAnsi count of user-perceived characters in ANSI string.

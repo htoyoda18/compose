@@ -32,9 +32,9 @@ import (
 	"github.com/compose-spec/compose-go/v2/cli"
 	"github.com/compose-spec/compose-go/v2/dotenv"
 	"github.com/compose-spec/compose-go/v2/loader"
+	composepaths "github.com/compose-spec/compose-go/v2/paths"
 	"github.com/compose-spec/compose-go/v2/types"
 	composegoutils "github.com/compose-spec/compose-go/v2/utils"
-	"github.com/docker/buildx/util/logutil"
 	dockercli "github.com/docker/cli/cli"
 	"github.com/docker/cli/cli-plugins/metadata"
 	"github.com/docker/cli/cli/command"
@@ -138,17 +138,18 @@ func Adapt(fn Command) func(cmd *cobra.Command, args []string) error {
 }
 
 type ProjectOptions struct {
-	ProjectName        string
-	Profiles           []string
-	ConfigPaths        []string
-	WorkDir            string
-	ProjectDir         string
-	EnvFiles           []string
-	Compatibility      bool
-	Progress           string
-	Offline            bool
-	All                bool
-	insecureRegistries []string
+	ProjectName           string
+	Profiles              []string
+	ConfigPaths           []string
+	WorkDir               string
+	ProjectDir            string
+	EnvFiles              []string
+	Compatibility         bool
+	Progress              string
+	Offline               bool
+	All                   bool
+	insecureRegistries    []string
+	remoteLoadersOverride []loader.ResourceLoader
 }
 
 // ProjectFunc does stuff within a types.Project
@@ -280,7 +281,7 @@ func (o *ProjectOptions) toProjectName(ctx context.Context, dockerCli command.Cl
 		return "", err
 	}
 
-	project, _, err := o.ToProject(ctx, dockerCli, backend, nil)
+	project, _, err := o.ToProject(ctx, dockerCli, backend, nil, cli.WithDiscardEnvFile, cli.WithoutEnvironmentResolution)
 	if err != nil {
 		return "", err
 	}
@@ -347,9 +348,7 @@ func (o *ProjectOptions) ToProject(ctx context.Context, dockerCli command.Cli, b
 		Compatibility:     o.Compatibility,
 		ProjectOptionsFns: po,
 		LoadListeners:     []api.LoadListener{metricsListener},
-		OCI: api.OCIOptions{
-			InsecureRegistries: o.insecureRegistries,
-		},
+		OCI:               o.ociOptions(),
 	}
 
 	project, err := backend.LoadProject(ctx, loadOpts)
@@ -361,12 +360,26 @@ func (o *ProjectOptions) ToProject(ctx context.Context, dockerCli command.Cli, b
 }
 
 func (o *ProjectOptions) remoteLoaders(dockerCli command.Cli) []loader.ResourceLoader {
+	if o.remoteLoadersOverride != nil {
+		return o.remoteLoadersOverride
+	}
 	if o.Offline {
 		return nil
 	}
 	git := remote.NewGitRemoteLoader(dockerCli, o.Offline)
-	oci := remote.NewOCIRemoteLoader(dockerCli, o.Offline, api.OCIOptions{})
+	oci := remote.NewOCIRemoteLoader(dockerCli, o.Offline, o.ociOptions())
 	return []loader.ResourceLoader{git, oci}
+}
+
+// ociOptions builds the OCI loader configuration from the project options.
+// Both the primary project load and the loaders returned by remoteLoaders
+// must use this so the --insecure-registry flag is honored on every path
+// that pulls an OCI compose artifact (e.g. the interpolation-variable
+// re-load that `up` runs via ToModel). See docker/compose#13824.
+func (o *ProjectOptions) ociOptions() api.OCIOptions {
+	return api.OCIOptions{
+		InsecureRegistries: o.insecureRegistries,
+	}
 }
 
 func (o *ProjectOptions) toProjectOptions(po ...cli.ProjectOptionsFn) (*cli.ProjectOptions, error) {
@@ -409,7 +422,7 @@ const PluginName = "compose"
 
 // RunningAsStandalone detects when running as a standalone program
 func RunningAsStandalone() bool {
-	return len(os.Args) < 2 || os.Args[1] != metadata.MetadataSubcommandName && os.Args[1] != PluginName
+	return len(os.Args) < 2 || os.Args[1] != metadata.MetadataSubcommandName && os.Args[1] != metadata.HookSubcommandName && os.Args[1] != PluginName
 }
 
 type BackendOptions struct {
@@ -421,17 +434,7 @@ func (o *BackendOptions) Add(option compose.Option) {
 }
 
 // RootCommand returns the compose command with its child commands
-func RootCommand(dockerCli command.Cli, backendOptions *BackendOptions) *cobra.Command { //nolint:gocyclo
-	// filter out useless commandConn.CloseWrite warning message that can occur
-	// when using a remote context that is unreachable: "commandConn.CloseWrite: commandconn: failed to wait: signal: killed"
-	// https://github.com/docker/cli/blob/e1f24d3c93df6752d3c27c8d61d18260f141310c/cli/connhelper/commandconn/commandconn.go#L203-L215
-	logrus.AddHook(logutil.NewFilter([]logrus.Level{
-		logrus.WarnLevel,
-	},
-		"commandConn.CloseWrite:",
-		"commandConn.CloseRead:",
-	))
-
+func RootCommand(dockerCli command.Cli, backendOptions *BackendOptions) *cobra.Command {
 	opts := ProjectOptions{}
 	var (
 		ansi     string
@@ -461,118 +464,40 @@ func RootCommand(dockerCli command.Cli, backendOptions *BackendOptions) *cobra.C
 			}
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			parent := cmd.Root()
-			if parent != nil {
-				parentPrerun := parent.PersistentPreRunE
-				if parentPrerun != nil {
-					err := parentPrerun(cmd, args)
-					if err != nil {
-						return err
-					}
-				}
+			err := runParentPreRun(cmd, args)
+			if err != nil {
+				return err
 			}
 
 			if verbose {
 				logrus.SetLevel(logrus.TraceLevel)
 			}
 
-			err := setEnvWithDotEnv(opts)
+			err = setEnvWithDotEnv(opts, dockerCli)
 			if err != nil {
 				return err
 			}
-			if noAnsi {
-				if ansi != "auto" {
-					return errors.New(`cannot specify DEPRECATED "--no-ansi" and "--ansi". Please use only "--ansi"`)
-				}
-				ansi = "never"
-				fmt.Fprint(os.Stderr, "option '--no-ansi' is DEPRECATED ! Please use '--ansi' instead.\n")
+			ansi, err = resolveAnsiMode(cmd, ansi, noAnsi)
+			if err != nil {
+				return err
 			}
-			if v, ok := os.LookupEnv("COMPOSE_ANSI"); ok && !cmd.Flags().Changed("ansi") {
-				ansi = v
-			}
-			formatter.SetANSIMode(dockerCli, ansi)
+			applyAnsiMode(dockerCli, ansi)
 
-			if noColor, ok := os.LookupEnv("NO_COLOR"); ok && noColor != "" {
-				display.NoColor()
-				formatter.SetANSIMode(dockerCli, formatter.Never)
-			}
-
-			switch ansi {
-			case "never":
-				display.Mode = display.ModePlain
-			case "always":
-				display.Mode = display.ModeTTY
-			}
-
-			var ep api.EventProcessor
-			switch opts.Progress {
-			case "", display.ModeAuto:
-				switch {
-				case ansi == "never":
-					display.Mode = display.ModePlain
-					ep = display.Plain(dockerCli.Err())
-				case dockerCli.Out().IsTerminal():
-					ep = display.Full(dockerCli.Err(), stdinfo(dockerCli))
-				default:
-					ep = display.Plain(dockerCli.Err())
-				}
-			case display.ModeTTY:
-				if ansi == "never" {
-					return fmt.Errorf("can't use --progress tty while ANSI support is disabled")
-				}
-				display.Mode = display.ModeTTY
-				ep = display.Full(dockerCli.Err(), stdinfo(dockerCli))
-
-			case display.ModePlain:
-				if ansi == "always" {
-					return fmt.Errorf("can't use --progress plain while ANSI support is forced")
-				}
-				display.Mode = display.ModePlain
-				ep = display.Plain(dockerCli.Err())
-			case display.ModeQuiet, "none":
-				display.Mode = display.ModeQuiet
-				ep = display.Quiet()
-			case display.ModeJSON:
-				display.Mode = display.ModeJSON
-				logrus.SetFormatter(&logrus.JSONFormatter{})
-				ep = display.JSON(dockerCli.Err())
-			default:
-				return fmt.Errorf("unsupported --progress value %q", opts.Progress)
+			detached, _ := cmd.Flags().GetBool("detach")
+			ep, err := selectEventProcessor(dockerCli, opts.Progress, ansi, detached)
+			if err != nil {
+				return err
 			}
 			backendOptions.Add(compose.WithEventProcessor(ep))
 
-			// (4) options validation / normalization
-			if opts.WorkDir != "" {
-				if opts.ProjectDir != "" {
-					return errors.New(`cannot specify DEPRECATED "--workdir" and "--project-directory". Please use only "--project-directory" instead`)
-				}
-				opts.ProjectDir = opts.WorkDir
-				fmt.Fprint(os.Stderr, aec.Apply("option '--workdir' is DEPRECATED at root level! Please use '--project-directory' instead.\n", aec.RedF))
-			}
-			for i, file := range opts.EnvFiles {
-				if !filepath.IsAbs(file) {
-					file, err := filepath.Abs(file)
-					if err != nil {
-						return err
-					}
-					opts.EnvFiles[i] = file
-				}
+			err = normalizeProjectOptions(&opts)
+			if err != nil {
+				return err
 			}
 
-			composeCmd := cmd
-			for composeCmd.Name() != PluginName {
-				if !composeCmd.HasParent() {
-					return fmt.Errorf("error parsing command line, expected %q", PluginName)
-				}
-				composeCmd = composeCmd.Parent()
-			}
-
-			if v, ok := os.LookupEnv(ComposeParallelLimit); ok && !composeCmd.Flags().Changed("parallel") {
-				i, err := strconv.Atoi(v)
-				if err != nil {
-					return fmt.Errorf("%s must be an integer (found: %q)", ComposeParallelLimit, v)
-				}
-				parallel = i
+			parallel, err = resolveMaxConcurrency(cmd, parallel)
+			if err != nil {
+				return err
 			}
 			if parallel > 0 {
 				logrus.Debugf("Limiting max concurrency to %d jobs", parallel)
@@ -665,6 +590,92 @@ func RootCommand(dockerCli command.Cli, backendOptions *BackendOptions) *cobra.C
 	return c
 }
 
+// runParentPreRun invokes the docker CLI root command's PersistentPreRunE,
+// which cobra doesn't chain automatically.
+func runParentPreRun(cmd *cobra.Command, args []string) error {
+	parent := cmd.Root()
+	if parent == nil {
+		return nil
+	}
+	if prerun := parent.PersistentPreRunE; prerun != nil {
+		return prerun(cmd, args)
+	}
+	return nil
+}
+
+// resolveAnsiMode reconciles --ansi with the deprecated --no-ansi flag and
+// the COMPOSE_ANSI environment variable (flag wins over environment).
+func resolveAnsiMode(cmd *cobra.Command, ansi string, noAnsi bool) (string, error) {
+	if noAnsi {
+		if ansi != "auto" {
+			return "", errors.New(`cannot specify DEPRECATED "--no-ansi" and "--ansi". Please use only "--ansi"`)
+		}
+		ansi = "never"
+		fmt.Fprint(os.Stderr, "option '--no-ansi' is DEPRECATED ! Please use '--ansi' instead.\n")
+	}
+	if v, ok := os.LookupEnv("COMPOSE_ANSI"); ok && !cmd.Flags().Changed("ansi") {
+		ansi = v
+	}
+	return ansi, nil
+}
+
+// applyAnsiMode configures ANSI output, honoring the NO_COLOR convention
+// (https://no-color.org). The progress display mode is resolved separately,
+// by selectEventProcessor.
+func applyAnsiMode(dockerCli command.Cli, ansi string) {
+	formatter.SetANSIMode(dockerCli, ansi)
+
+	if noColor, ok := os.LookupEnv("NO_COLOR"); ok && noColor != "" {
+		display.NoColor()
+		formatter.SetANSIMode(dockerCli, formatter.Never)
+	}
+}
+
+// normalizeProjectOptions handles the deprecated --workdir flag and makes
+// env-file paths absolute.
+func normalizeProjectOptions(opts *ProjectOptions) error {
+	if opts.WorkDir != "" {
+		if opts.ProjectDir != "" {
+			return errors.New(`cannot specify DEPRECATED "--workdir" and "--project-directory". Please use only "--project-directory" instead`)
+		}
+		opts.ProjectDir = opts.WorkDir
+		fmt.Fprint(os.Stderr, aec.Apply("option '--workdir' is DEPRECATED at root level! Please use '--project-directory' instead.\n", aec.RedF))
+	}
+	for i, file := range opts.EnvFiles {
+		file = composepaths.ExpandUser(file)
+		if !filepath.IsAbs(file) {
+			abs, err := filepath.Abs(file)
+			if err != nil {
+				return err
+			}
+			file = abs
+		}
+		opts.EnvFiles[i] = file
+	}
+	return nil
+}
+
+// resolveMaxConcurrency returns the parallelism limit: COMPOSE_PARALLEL_LIMIT
+// applies unless --parallel was set explicitly on the compose command.
+func resolveMaxConcurrency(cmd *cobra.Command, parallel int) (int, error) {
+	composeCmd := cmd
+	for composeCmd.Name() != PluginName {
+		if !composeCmd.HasParent() {
+			return 0, fmt.Errorf("error parsing command line, expected %q", PluginName)
+		}
+		composeCmd = composeCmd.Parent()
+	}
+
+	if v, ok := os.LookupEnv(ComposeParallelLimit); ok && !composeCmd.Flags().Changed("parallel") {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, fmt.Errorf("%s must be an integer (found: %q)", ComposeParallelLimit, v)
+		}
+		parallel = i
+	}
+	return parallel, nil
+}
+
 func stdinfo(dockerCli command.Cli) io.Writer {
 	if stdioToStdout {
 		return dockerCli.Out()
@@ -672,7 +683,66 @@ func stdinfo(dockerCli command.Cli) io.Writer {
 	return dockerCli.Err()
 }
 
-func setEnvWithDotEnv(opts ProjectOptions) error {
+// selectEventProcessor picks the EventProcessor for Compose progress rendering,
+// and resolves display.Mode to the mode actually rendered: every branch assigns
+// it, so after command setup the global never holds ModeAuto.
+//
+// In auto mode we probe Err() (not Out()) because the renderer writes to stderr;
+// probing stdout would force plain mode whenever stdout is redirected (e.g.
+// `docker compose up | tee log`) while stderr is still a terminal.
+func selectEventProcessor(dockerCli command.Cli, progress, ansi string, detached bool) (api.EventProcessor, error) {
+	switch progress {
+	case "", display.ModeAuto:
+		switch {
+		case ansi == "never":
+			display.Mode = display.ModePlain
+			return display.Plain(dockerCli.Err()), nil
+		case dockerCli.Err().IsTerminal():
+			display.Mode = display.ModeTTY
+			return display.Full(dockerCli.Err(), stdinfo(dockerCli), detached), nil
+		default:
+			display.Mode = display.ModePlain
+			return display.Plain(dockerCli.Err()), nil
+		}
+	case display.ModeTTY:
+		if ansi == "never" {
+			return nil, fmt.Errorf("can't use --progress tty while ANSI support is disabled")
+		}
+		display.Mode = display.ModeTTY
+		return display.Full(dockerCli.Err(), stdinfo(dockerCli), detached), nil
+	case display.ModePlain:
+		if ansi == "always" {
+			return nil, fmt.Errorf("can't use --progress plain while ANSI support is forced")
+		}
+		display.Mode = display.ModePlain
+		return display.Plain(dockerCli.Err()), nil
+	case display.ModeQuiet, "none":
+		display.Mode = display.ModeQuiet
+		return display.Quiet(), nil
+	case display.ModeJSON:
+		display.Mode = display.ModeJSON
+		logrus.SetFormatter(&logrus.JSONFormatter{})
+		return display.JSON(dockerCli.Err()), nil
+	default:
+		return nil, fmt.Errorf("unsupported --progress value %q", progress)
+	}
+}
+
+func setEnvWithDotEnv(opts ProjectOptions, dockerCli command.Cli) error {
+	// Check if we're using a remote config (OCI or Git)
+	// If so, skip env loading as remote loaders haven't been initialized yet
+	// and trying to process the path would fail
+	remoteLoaders := opts.remoteLoaders(dockerCli)
+	for _, path := range opts.ConfigPaths {
+		for _, loader := range remoteLoaders {
+			if loader.Accept(path) {
+				// Remote config - skip env loading for now
+				// It will be loaded later when the project is fully initialized
+				return nil
+			}
+		}
+	}
+
 	options, err := cli.NewProjectOptions(opts.ConfigPaths,
 		cli.WithWorkingDirectory(opts.ProjectDir),
 		cli.WithOsEnv,

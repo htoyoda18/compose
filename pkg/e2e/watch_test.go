@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/assert/cmp"
 	"gotest.tools/v3/icmd"
@@ -81,7 +80,7 @@ func TestRebuildOnDotEnvWithExternalNetwork(t *testing.T) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	r := icmd.StartCmd(cmd)
-	require.NoError(t, r.Error)
+	assert.NilError(t, r.Error)
 	var testComplete atomic.Bool
 	go func() {
 		// if the process exits abnormally before the test is done, fail the test
@@ -141,9 +140,9 @@ func doTest(t *testing.T, svcName string) {
 	writeTestFile := func(name, contents, sourceDir string) {
 		t.Helper()
 		dest := filepath.Join(sourceDir, name)
-		require.NoError(t, os.MkdirAll(filepath.Dir(dest), 0o700))
+		assert.NilError(t, os.MkdirAll(filepath.Dir(dest), 0o700))
 		t.Logf("writing %q to %q", contents, dest)
-		require.NoError(t, os.WriteFile(dest, []byte(contents+"\n"), 0o600))
+		assert.NilError(t, os.WriteFile(dest, []byte(contents+"\n"), 0o600))
 	}
 	writeDataFile := func(name, contents string) {
 		writeTestFile(name, contents, dataDir)
@@ -168,7 +167,7 @@ func doTest(t *testing.T, svcName string) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	r := icmd.StartCmd(cmd)
-	require.NoError(t, r.Error)
+	assert.NilError(t, r.Error)
 	t.Cleanup(func() {
 		// IMPORTANT: watch doesn't exit on its own, don't leak processes!
 		if r.Cmd.Process != nil {
@@ -184,7 +183,7 @@ func doTest(t *testing.T, svcName string) {
 		}
 	}()
 
-	require.NoError(t, os.Mkdir(dataDir, 0o700))
+	assert.NilError(t, os.Mkdir(dataDir, 0o700))
 
 	checkFileContents := func(path string, contents string) poll.Check {
 		return func(pollLog poll.LogT) poll.Result {
@@ -218,7 +217,7 @@ func doTest(t *testing.T, svcName string) {
 	poll.WaitOn(t, checkFileContents("/app/data/hello.txt", "hello watch"))
 
 	t.Logf("Deleting file")
-	require.NoError(t, os.Remove(filepath.Join(dataDir, "hello.txt")))
+	assert.NilError(t, os.Remove(filepath.Join(dataDir, "hello.txt")))
 	waitForFlush()
 	cli.RunDockerComposeCmdNoCheck(t, "exec", svcName, "stat", "/app/data/hello.txt").
 		Assert(t, icmd.Expected{
@@ -242,7 +241,7 @@ func doTest(t *testing.T, svcName string) {
 		})
 
 	t.Logf("Creating subdirectory")
-	require.NoError(t, os.Mkdir(filepath.Join(dataDir, "subdir"), 0o700))
+	assert.NilError(t, os.Mkdir(filepath.Join(dataDir, "subdir"), 0o700))
 	waitForFlush()
 	cli.RunDockerComposeCmd(t, "exec", svcName, "stat", "/app/data/subdir")
 
@@ -261,7 +260,7 @@ func doTest(t *testing.T, svcName string) {
 	poll.WaitOn(t, checkFileContents("/app/data/subdir/file.txt", "x"))
 
 	t.Logf("Deleting directory")
-	require.NoError(t, os.RemoveAll(filepath.Join(dataDir, "subdir")))
+	assert.NilError(t, os.RemoveAll(filepath.Join(dataDir, "subdir")))
 	waitForFlush()
 	cli.RunDockerComposeCmdNoCheck(t, "exec", svcName, "stat", "/app/data/subdir").
 		Assert(t, icmd.Expected{
@@ -270,7 +269,7 @@ func doTest(t *testing.T, svcName string) {
 		})
 
 	t.Logf("Sync and restart use case")
-	require.NoError(t, os.Mkdir(configDir, 0o700))
+	assert.NilError(t, os.Mkdir(configDir, 0o700))
 	writeTestFile("file.config", "This is an updated config file", configDir)
 	checkRestart := func(state string) poll.Check {
 		return func(pollLog poll.LogT) poll.Result {
@@ -311,7 +310,7 @@ func TestWatchExec(t *testing.T) {
 	t.Logf("Create new file")
 
 	testFile := filepath.Join(tmpdir, "test")
-	require.NoError(t, os.WriteFile(testFile, []byte("test\n"), 0o600))
+	assert.NilError(t, os.WriteFile(testFile, []byte("test\n"), 0o600))
 
 	poll.WaitOn(t, func(l poll.LogT) poll.Result {
 		out := buffer.String()
@@ -334,9 +333,9 @@ func TestWatchMultiServices(t *testing.T) {
 	CopyFile(t, filepath.Join("fixtures", "watch", "rebuild.yaml"), composeFilePath)
 
 	testFile := filepath.Join(tmpdir, "test")
-	require.NoError(t, os.WriteFile(testFile, []byte("test"), 0o600))
+	assert.NilError(t, os.WriteFile(testFile, []byte("test"), 0o600))
 
-	cmd := c.NewDockerComposeCmd(t, "-p", projectName, "-f", composeFilePath, "up", "--watch")
+	cmd := c.NewDockerComposeCmd(t, "-p", projectName, "-f", composeFilePath, "up", "--build", "--watch")
 	buffer := bytes.NewBuffer(nil)
 	cmd.Stdout = buffer
 	watch := icmd.StartCmd(cmd)
@@ -346,7 +345,7 @@ func TestWatchMultiServices(t *testing.T) {
 			return poll.Success()
 		}
 		return poll.Continue("%v", watch.Stdout())
-	})
+	}, poll.WithTimeout(90*time.Second), poll.WithDelay(time.Second))
 
 	waitRebuild := func(service string, expected string) {
 		poll.WaitOn(t, func(l poll.LogT) poll.Result {
@@ -355,16 +354,153 @@ func TestWatchMultiServices(t *testing.T) {
 				return poll.Success()
 			}
 			return poll.Continue("%v", cat.Combined())
-		})
+		}, poll.WithTimeout(90*time.Second), poll.WithDelay(time.Second))
 	}
 	waitRebuild("a", "test")
 	waitRebuild("b", "test")
 	waitRebuild("c", "test")
 
-	require.NoError(t, os.WriteFile(testFile, []byte("updated"), 0o600))
+	assert.NilError(t, os.WriteFile(testFile, []byte("updated"), 0o600))
 	waitRebuild("a", "updated")
 	waitRebuild("b", "updated")
 	waitRebuild("c", "updated")
+
+	c.RunDockerComposeCmdNoCheck(t, "-p", projectName, "kill", "-s", "9")
+}
+
+// TestWatchRebuildIgnoresDependencies verifies that when `compose up --watch`
+// rebuilds a service after a file change, the rebuild does NOT cascade to its
+// `depends_on` dependencies.
+//
+// Reproduces docker/compose#13853: `up --build` sets BuildOptions.Deps=true to
+// build images for dependencies on initial startup; the watch rebuild path
+// reused those BuildOptions without resetting Deps, so a single watched
+// service triggered builds for the whole dependency chain.
+//
+// The test scans build progress output between the "Rebuilding service(s)" and
+// "successfully built" markers and asserts only the watched service appears.
+func TestWatchRebuildIgnoresDependencies(t *testing.T) {
+	c := NewCLI(t)
+	const projectName = "test_watch_rebuild_deps"
+
+	defer c.cleanupWithDown(t, projectName)
+
+	tmpdir := t.TempDir()
+	composeFilePath := filepath.Join(tmpdir, "compose.yaml")
+	CopyFile(t, filepath.Join("fixtures", "watch", "rebuild-deps.yaml"), composeFilePath)
+
+	testFile := filepath.Join(tmpdir, "test")
+	assert.NilError(t, os.WriteFile(testFile, []byte("initial"), 0o600))
+
+	cmd := c.NewDockerComposeCmd(t, "-p", projectName, "-f", composeFilePath, "up", "--build", "--watch")
+	buffer := bytes.NewBuffer(nil)
+	cmd.Stdout = buffer
+	cmd.Stderr = buffer
+	watch := icmd.StartCmd(cmd)
+	assert.NilError(t, watch.Error)
+	t.Cleanup(func() {
+		if watch.Cmd.Process != nil {
+			_ = watch.Cmd.Process.Kill()
+		}
+	})
+
+	// Wait until the watcher is actually running. "Watch enabled" is logged
+	// AFTER the initial up (and its build output) is done, so anchoring the
+	// cutoff here keeps initial-build noise out of the rebuild assertions.
+	poll.WaitOn(t, func(l poll.LogT) poll.Result {
+		if strings.Contains(buffer.String(), "Watch enabled") {
+			return poll.Success()
+		}
+		return poll.Continue("waiting for watch to start: %v", buffer.String())
+	}, poll.WithTimeout(120*time.Second), poll.WithDelay(time.Second))
+
+	// Record the cutoff point in the log buffer so we only inspect output
+	// produced AFTER the file change triggers the rebuild.
+	logCutoff := buffer.Len()
+
+	// Trigger a rebuild of the frontend (only) by modifying the watched file.
+	assert.NilError(t, os.WriteFile(testFile, []byte("updated"), 0o600))
+
+	// Wait until the rebuild is reported as completed.
+	poll.WaitOn(t, func(l poll.LogT) poll.Result {
+		out := buffer.String()
+		if len(out) <= logCutoff {
+			return poll.Continue("no new output yet")
+		}
+		if strings.Contains(out[logCutoff:], `service(s) ["frontend"] successfully built`) {
+			return poll.Success()
+		}
+		return poll.Continue("waiting for rebuild to finish: %v", out[logCutoff:])
+	}, poll.WithTimeout(120*time.Second), poll.WithDelay(time.Second))
+
+	rebuildLog := buffer.String()[logCutoff:]
+
+	// The watch rebuild must only touch the frontend service. The backend is
+	// an upstream dependency and must not be rebuilt.
+	assert.Assert(t, strings.Contains(rebuildLog, `Rebuilding service(s) ["frontend"]`),
+		"expected rebuild of frontend; got:\n%s", rebuildLog)
+	assert.Assert(t, !strings.Contains(rebuildLog, "backend Building"),
+		"backend was unexpectedly rebuilt; got:\n%s", rebuildLog)
+	assert.Assert(t, !strings.Contains(rebuildLog, "backend Built"),
+		"backend was unexpectedly rebuilt; got:\n%s", rebuildLog)
+
+	c.RunDockerComposeCmdNoCheck(t, "-p", projectName, "kill", "-s", "9")
+}
+
+// Reproduces docker/compose#13795: syncing a directory onto a path the image exposes as a
+// symlink failed with `cannot overwrite non-directory "/app/data/sub" with directory "/"`.
+func TestWatchSyncIntoSymlinkedDirectory(t *testing.T) {
+	c := NewCLI(t)
+	const projectName = "test_watch_symlink"
+
+	defer c.cleanupWithDown(t, projectName)
+
+	tmpdir := t.TempDir()
+	composeFilePath := filepath.Join(tmpdir, "compose.yaml")
+	CopyFile(t, filepath.Join("fixtures", "watch", "symlink.yaml"), composeFilePath)
+	dataDir := filepath.Join(tmpdir, "data")
+	assert.NilError(t, os.Mkdir(dataDir, 0o700))
+
+	// Fill the directory outside the watched tree and move it in, so a single change carries
+	// the directory together with its content, the way a branch switch does.
+	staged := filepath.Join(tmpdir, "staged")
+	assert.NilError(t, os.Mkdir(staged, 0o700))
+	assert.NilError(t, os.WriteFile(filepath.Join(staged, "hello.txt"), []byte("hello symlink\n"), 0o600))
+
+	cmd := c.NewDockerComposeCmd(t, "-p", projectName, "-f", composeFilePath, "up", "--watch")
+	buffer := bytes.NewBuffer(nil)
+	cmd.Stdout = buffer
+	cmd.Stderr = buffer
+	watch := icmd.StartCmd(cmd)
+	assert.NilError(t, watch.Error)
+	t.Cleanup(func() {
+		if watch.Cmd.Process != nil {
+			_ = watch.Cmd.Process.Kill()
+		}
+	})
+
+	poll.WaitOn(t, func(l poll.LogT) poll.Result {
+		if strings.Contains(buffer.String(), "Watch enabled") {
+			return poll.Success()
+		}
+		return poll.Continue("waiting for watch to start: %v", buffer.String())
+	}, poll.WithTimeout(120*time.Second))
+
+	assert.NilError(t, os.Rename(staged, filepath.Join(dataDir, "sub")))
+
+	poll.WaitOn(t, func(l poll.LogT) poll.Result {
+		// The image resolves /app/data/sub to /var/sub, where the synced file has to show up.
+		cat := c.RunDockerComposeCmdNoCheck(t, "-p", projectName, "exec", "app", "cat", "/var/sub/hello.txt")
+		if strings.Contains(cat.Stdout(), "hello symlink") {
+			return poll.Success()
+		}
+		return poll.Continue("%v\n%v", cat.Combined(), buffer.String())
+	}, poll.WithTimeout(60*time.Second), poll.WithDelay(time.Second))
+
+	// the sync must go through the symlink, not replace it
+	c.RunDockerComposeCmd(t, "-p", projectName, "exec", "app", "test", "-L", "/app/data/sub")
+	assert.Assert(t, !strings.Contains(buffer.String(), "cannot overwrite non-directory"),
+		"sync failed on the symlinked path:\n%s", buffer.String())
 
 	c.RunDockerComposeCmdNoCheck(t, "-p", projectName, "kill", "-s", "9")
 }
@@ -391,8 +527,8 @@ func TestWatchIncludes(t *testing.T) {
 		return poll.Continue("%v", watch.Stdout())
 	})
 
-	require.NoError(t, os.WriteFile(filepath.Join(tmpdir, "B.test"), []byte("test"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpdir, "A.test"), []byte("test"), 0o600))
+	assert.NilError(t, os.WriteFile(filepath.Join(tmpdir, "B.test"), []byte("test"), 0o600))
+	assert.NilError(t, os.WriteFile(filepath.Join(tmpdir, "A.test"), []byte("test"), 0o600))
 
 	poll.WaitOn(t, func(l poll.LogT) poll.Result {
 		cat := c.RunDockerComposeCmdNoCheck(t, "-p", projectName, "exec", "a", "ls", "/data/")

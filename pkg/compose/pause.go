@@ -20,8 +20,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/docker/docker/api/types/container"
-	"golang.org/x/sync/errgroup"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 
 	"github.com/docker/compose/v5/pkg/api"
 )
@@ -42,18 +42,13 @@ func (s *composeService) pause(ctx context.Context, projectName string, options 
 		containers = containers.filter(isService(options.Project.ServiceNames()...))
 	}
 
-	eg, ctx := errgroup.WithContext(ctx)
-	containers.forEach(func(container container.Summary) {
-		eg.Go(func() error {
-			err := s.apiClient().ContainerPause(ctx, container.ID)
-			if err == nil {
-				eventName := getContainerProgressName(container)
-				s.events.On(newEvent(eventName, api.Done, "Paused"))
-			}
-			return err
-		})
+	return forEachContainerConcurrent(ctx, containers, func(ctx context.Context, ctr container.Summary) error {
+		_, err := s.apiClient().ContainerPause(ctx, ctr.ID, client.ContainerPauseOptions{})
+		if err == nil {
+			s.events.On(newEvent(getContainerProgressName(ctr), api.Done, "Paused"))
+		}
+		return err
 	})
-	return eg.Wait()
 }
 
 func (s *composeService) UnPause(ctx context.Context, projectName string, options api.PauseOptions) error {
@@ -72,16 +67,11 @@ func (s *composeService) unPause(ctx context.Context, projectName string, option
 		containers = containers.filter(isService(options.Project.ServiceNames()...))
 	}
 
-	eg, ctx := errgroup.WithContext(ctx)
-	containers.forEach(func(ctr container.Summary) {
-		eg.Go(func() error {
-			err = s.apiClient().ContainerUnpause(ctx, ctr.ID)
-			if err == nil {
-				eventName := getContainerProgressName(ctr)
-				s.events.On(newEvent(eventName, api.Done, "Unpaused"))
-			}
-			return err
-		})
+	return forEachContainerConcurrent(ctx, containers, func(ctx context.Context, ctr container.Summary) error {
+		_, err := s.apiClient().ContainerUnpause(ctx, ctr.ID, client.ContainerUnpauseOptions{})
+		if err == nil {
+			s.events.On(newEvent(getContainerProgressName(ctr), api.Done, "Unpaused"))
+		}
+		return err
 	})
-	return eg.Wait()
 }

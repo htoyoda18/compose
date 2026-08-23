@@ -24,10 +24,8 @@ import (
 
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/containerd/errdefs"
-	containerType "github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	imageapi "github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
+	containerType "github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 
@@ -43,7 +41,7 @@ func (s *composeService) Down(ctx context.Context, projectName string, options a
 	}, "down", s.events)
 }
 
-func (s *composeService) down(ctx context.Context, projectName string, options api.DownOptions) error { //nolint:gocyclo
+func (s *composeService) down(ctx context.Context, projectName string, options api.DownOptions) error {
 	resourceToRemove := false
 
 	include := oneOffExclude
@@ -63,10 +61,18 @@ func (s *composeService) down(ctx context.Context, projectName string, options a
 		}
 	}
 
-	// Check requested services exists in model
-	services, err := checkSelectedServices(options, project)
-	if err != nil {
-		return err
+	// keep only the requested services that exist in the model
+	var services []string
+	for _, service := range options.Services {
+		if _, err := project.GetService(service); err != nil {
+			if options.Project != nil {
+				// ran with an explicit compose.yaml file, so we should not ignore
+				return err
+			}
+			// ran without an explicit compose.yaml file, so can't distinguish typo vs container already removed
+			continue
+		}
+		services = append(services, service)
 	}
 
 	if len(options.Services) > 0 && len(services) == 0 {
@@ -101,6 +107,10 @@ func (s *composeService) down(ctx context.Context, projectName string, options a
 		}
 	}
 
+	if err := s.removePreStartHookContainers(ctx, projectName, options.Services); err != nil {
+		return err
+	}
+
 	ops := s.ensureNetworksDown(ctx, project)
 
 	if options.Images != "" {
@@ -124,23 +134,6 @@ func (s *composeService) down(ctx context.Context, projectName string, options a
 		eg.Go(op)
 	}
 	return eg.Wait()
-}
-
-func checkSelectedServices(options api.DownOptions, project *types.Project) ([]string, error) {
-	var services []string
-	for _, service := range options.Services {
-		_, err := project.GetService(service)
-		if err != nil {
-			if options.Project != nil {
-				// ran with an explicit compose.yaml file, so we should not ignore
-				return nil, err
-			}
-			// ran without an explicit compose.yaml file, so can't distinguish typo vs container already removed
-		} else {
-			services = append(services, service)
-		}
-	}
-	return services, nil
 }
 
 func (s *composeService) ensureVolumesDown(ctx context.Context, project *types.Project) []downOp {
@@ -173,7 +166,10 @@ func (s *composeService) ensureImagesDown(ctx context.Context, project *types.Pr
 	for i := range images {
 		img := images[i]
 		ops = append(ops, func() error {
-			return s.removeImage(ctx, img)
+			return s.removeResource("Image "+img, func() error {
+				_, err := s.apiClient().ImageRemove(ctx, img, client.ImageRemoveOptions{})
+				return err
+			})
 		})
 	}
 	return ops, nil
@@ -196,14 +192,13 @@ func (s *composeService) ensureNetworksDown(ctx context.Context, project *types.
 }
 
 func (s *composeService) removeNetwork(ctx context.Context, composeNetworkName string, projectName string, name string) error {
-	networks, err := s.apiClient().NetworkList(ctx, network.ListOptions{
-		Filters: filters.NewArgs(
-			projectFilter(projectName),
-			networkFilter(composeNetworkName)),
+	res, err := s.apiClient().NetworkList(ctx, client.NetworkListOptions{
+		Filters: projectFilter(projectName).Add("label", networkFilter(composeNetworkName)),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list networks: %w", err)
 	}
+	networks := res.Items
 
 	if len(networks) == 0 {
 		return nil
@@ -217,7 +212,7 @@ func (s *composeService) removeNetwork(ctx context.Context, composeNetworkName s
 		if net.Name != name {
 			continue
 		}
-		nw, err := s.apiClient().NetworkInspect(ctx, net.ID, network.InspectOptions{})
+		nwInspect, err := s.apiClient().NetworkInspect(ctx, net.ID, client.NetworkInspectOptions{})
 		if errdefs.IsNotFound(err) {
 			s.events.On(newEvent(eventName, api.Warning, "No resource found to remove"))
 			return nil
@@ -225,13 +220,14 @@ func (s *composeService) removeNetwork(ctx context.Context, composeNetworkName s
 		if err != nil {
 			return err
 		}
-		if len(nw.Containers) > 0 {
+		inspectedNetwork := nwInspect.Network
+		if len(inspectedNetwork.Containers) > 0 {
 			s.events.On(newEvent(eventName, api.Warning, "Resource is still in use"))
 			found++
 			continue
 		}
 
-		if err := s.apiClient().NetworkRemove(ctx, net.ID); err != nil {
+		if _, err := s.apiClient().NetworkRemove(ctx, net.ID, client.NetworkRemoveOptions{}); err != nil {
 			if errdefs.IsNotFound(err) {
 				continue
 			}
@@ -252,46 +248,38 @@ func (s *composeService) removeNetwork(ctx context.Context, composeNetworkName s
 	return nil
 }
 
-func (s *composeService) removeImage(ctx context.Context, image string) error {
-	id := fmt.Sprintf("Image %s", image)
-	s.events.On(newEvent(id, api.Working, "Removing"))
-	_, err := s.apiClient().ImageRemove(ctx, image, imageapi.RemoveOptions{})
-	if err == nil {
-		s.events.On(newEvent(id, api.Done, "Removed"))
-		return nil
-	}
-	if errdefs.IsConflict(err) {
-		s.events.On(newEvent(id, api.Warning, "Resource is still in use"))
-		return nil
-	}
-	if errdefs.IsNotFound(err) {
-		s.events.On(newEvent(id, api.Done, "Warning: No resource found to remove"))
-		return nil
-	}
-	return err
-}
-
 func (s *composeService) removeVolume(ctx context.Context, id string) error {
 	resource := fmt.Sprintf("Volume %s", id)
 
-	_, err := s.apiClient().VolumeInspect(ctx, id)
+	_, err := s.apiClient().VolumeInspect(ctx, id, client.VolumeInspectOptions{})
 	if errdefs.IsNotFound(err) {
 		// Already gone
 		return nil
 	}
 
-	s.events.On(newEvent(resource, api.Working, "Removing"))
-	err = s.apiClient().VolumeRemove(ctx, id, true)
+	return s.removeResource(resource, func() error {
+		_, err := s.apiClient().VolumeRemove(ctx, id, client.VolumeRemoveOptions{
+			Force: true,
+		})
+		return err
+	})
+}
+
+// removeResource emits a "Removing" progress event, calls op, then emits the appropriate
+// completion event based on the error: nil→Removed, conflict→still-in-use warning, not-found→gone warning.
+func (s *composeService) removeResource(eventID string, op func() error) error {
+	s.events.On(newEvent(eventID, api.Working, "Removing"))
+	err := op()
 	if err == nil {
-		s.events.On(newEvent(resource, api.Done, "Removed"))
+		s.events.On(newEvent(eventID, api.Done, "Removed"))
 		return nil
 	}
 	if errdefs.IsConflict(err) {
-		s.events.On(newEvent(resource, api.Warning, "Resource is still in use"))
+		s.events.On(newEvent(eventID, api.Warning, "Resource is still in use"))
 		return nil
 	}
 	if errdefs.IsNotFound(err) {
-		s.events.On(newEvent(resource, api.Done, "Warning: No resource found to remove"))
+		s.events.On(newEvent(eventID, api.Done, "Warning: No resource found to remove"))
 		return nil
 	}
 	return err
@@ -299,7 +287,7 @@ func (s *composeService) removeVolume(ctx context.Context, id string) error {
 
 func (s *composeService) stopContainer(ctx context.Context, service *types.ServiceConfig, ctr containerType.Summary, timeout *time.Duration, listener api.ContainerEventListener) error {
 	eventName := getContainerProgressName(ctr)
-	s.events.On(stoppingEvent(eventName))
+	s.events.On(newEvent(eventName, api.Working, api.StatusStopping))
 
 	if service != nil {
 		for _, hook := range service.PreStop {
@@ -314,13 +302,14 @@ func (s *composeService) stopContainer(ctx context.Context, service *types.Servi
 		}
 	}
 
-	timeoutInSecond := utils.DurationSecondToInt(timeout)
-	err := s.apiClient().ContainerStop(ctx, ctr.ID, containerType.StopOptions{Timeout: timeoutInSecond})
+	_, err := s.apiClient().ContainerStop(ctx, ctr.ID, client.ContainerStopOptions{
+		Timeout: utils.DurationSecondToInt(timeout),
+	})
 	if err != nil {
 		s.events.On(errorEvent(eventName, "Error while Stopping"))
 		return err
 	}
-	s.events.On(stoppedEvent(eventName))
+	s.events.On(newEvent(eventName, api.Done, api.StatusStopped))
 	return nil
 }
 
@@ -355,7 +344,7 @@ func (s *composeService) stopAndRemoveContainer(ctx context.Context, ctr contain
 		return err
 	}
 	s.events.On(removingEvent(eventName))
-	err = s.apiClient().ContainerRemove(ctx, ctr.ID, containerType.RemoveOptions{
+	_, err = s.apiClient().ContainerRemove(ctx, ctr.ID, client.ContainerRemoveOptions{
 		Force:         true,
 		RemoveVolumes: volumes,
 	})
@@ -399,4 +388,44 @@ func (s *composeService) getProjectWithResources(ctx context.Context, containers
 	project.Networks = networks
 
 	return project, nil
+}
+
+// removePreStartHookContainers force-removes any pre_start hook containers that
+// were retained after a failed hook run. These containers are created without a
+// ConfigHashLabel, so getContainers and the normal teardown path never see them;
+// without this step they would survive compose down. When services is non-empty
+// the cleanup is scoped to those services; otherwise the whole project is swept.
+// Individual removal failures are logged at warn level and do not abort teardown.
+func (s *composeService) removePreStartHookContainers(ctx context.Context, projectName string, services []string) error {
+	var filters []client.Filters
+	if len(services) == 0 {
+		f := projectFilter(projectName)
+		f.Add("label", hookFilter(preStartHookType))
+		filters = []client.Filters{f}
+	} else {
+		for _, service := range services {
+			f := projectFilter(projectName)
+			f.Add("label", serviceFilter(service))
+			f.Add("label", hookFilter(preStartHookType))
+			filters = append(filters, f)
+		}
+	}
+	for _, f := range filters {
+		res, err := s.apiClient().ContainerList(ctx, client.ContainerListOptions{
+			All:     true,
+			Filters: f,
+		})
+		if err != nil {
+			return err
+		}
+		for _, ctr := range res.Items {
+			if _, removeErr := s.apiClient().ContainerRemove(ctx, ctr.ID, client.ContainerRemoveOptions{
+				Force:         true,
+				RemoveVolumes: true,
+			}); removeErr != nil {
+				logrus.Warnf("failed to remove retained pre_start hook container %s: %v", ctr.ID, removeErr)
+			}
+		}
+	}
+	return nil
 }

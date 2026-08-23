@@ -18,24 +18,18 @@ package compose
 
 import (
 	"context"
-	"strings"
+
+	"github.com/docker/compose/v5/internal/desktop"
 )
 
-// engineLabelDesktopAddress is used to detect that Compose is running with a
-// Docker Desktop context. When this label is present, the value is an endpoint
-// address for an in-memory socket (AF_UNIX or named pipe).
-const engineLabelDesktopAddress = "com.docker.desktop.address"
-
+// isDesktopIntegrationActive returns true when Docker Desktop is the active engine.
 func (s *composeService) isDesktopIntegrationActive(ctx context.Context) (bool, error) {
-	info, err := s.apiClient().Info(ctx)
-	if err != nil {
-		return false, err
-	}
-	for _, l := range info.Labels {
-		k, _, ok := strings.Cut(l, "=")
-		if ok && k == engineLabelDesktopAddress {
-			return true, nil
-		}
-	}
-	return false, nil
+	endpoint, err := desktop.Endpoint(ctx, s.apiClient())
+	return endpoint != "", err
+}
+
+// isDesktopFeatureActive checks whether a Docker Desktop feature flag is
+// enabled. Returns false silently when Desktop is not running or unreachable.
+func (s *composeService) isDesktopFeatureActive(ctx context.Context, feature string) bool {
+	return desktop.IsFeatureActive(ctx, s.apiClient(), feature)
 }

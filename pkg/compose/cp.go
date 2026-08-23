@@ -26,8 +26,9 @@ import (
 	"strings"
 
 	"github.com/docker/cli/cli/command"
-	"github.com/docker/docker/api/types/container"
 	"github.com/moby/go-archive"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/docker/compose/v5/pkg/api"
@@ -54,7 +55,7 @@ func (s *composeService) copy(ctx context.Context, projectName string, options a
 
 	var direction copyDirection
 	var serviceName string
-	var copyFunc func(ctx context.Context, containerID string, srcPath string, dstPath string, opts api.CopyOptions) error
+	var copyFunc func(ctx context.Context, containerID string, srcPath string, dstPath string, options api.CopyOptions) error
 	if srcService != "" {
 		direction |= fromService
 		serviceName = srcService
@@ -141,7 +142,7 @@ func (s *composeService) listContainersTargetedForCopy(ctx context.Context, proj
 	}
 }
 
-func (s *composeService) copyToContainer(ctx context.Context, containerID string, srcPath string, dstPath string, opts api.CopyOptions) error {
+func (s *composeService) copyToContainer(ctx context.Context, containerID string, srcPath string, dstPath string, options api.CopyOptions) error {
 	var err error
 	if srcPath != "-" {
 		// Get an absolute source path.
@@ -153,7 +154,13 @@ func (s *composeService) copyToContainer(ctx context.Context, containerID string
 
 	// Prepare destination copy info by stat-ing the container path.
 	dstInfo := archive.CopyInfo{Path: dstPath}
-	dstStat, err := s.apiClient().ContainerStatPath(ctx, containerID, dstPath)
+	var dstStat container.PathStat
+	res, err := s.apiClient().ContainerStatPath(ctx, containerID, client.ContainerStatPathOptions{
+		Path: dstPath,
+	})
+	if err == nil {
+		dstStat = res.Stat
+	}
 
 	// If the destination is a symbolic link, we should evaluate it.
 	if err == nil && dstStat.Mode&os.ModeSymlink != 0 {
@@ -165,7 +172,12 @@ func (s *composeService) copyToContainer(ctx context.Context, containerID string
 		}
 
 		dstInfo.Path = linkTarget
-		dstStat, err = s.apiClient().ContainerStatPath(ctx, containerID, linkTarget)
+		res, err = s.apiClient().ContainerStatPath(ctx, containerID, client.ContainerStatPathOptions{
+			Path: linkTarget,
+		})
+		if err == nil {
+			dstStat = res.Stat
+		}
 	}
 
 	// Validate the destination path
@@ -196,7 +208,7 @@ func (s *composeService) copyToContainer(ctx context.Context, containerID string
 		}
 	} else {
 		// Prepare source copy info.
-		srcInfo, err := archive.CopyInfoSourcePath(srcPath, opts.FollowLink)
+		srcInfo, err := archive.CopyInfoSourcePath(srcPath, options.FollowLink)
 		if err != nil {
 			return err
 		}
@@ -232,14 +244,16 @@ func (s *composeService) copyToContainer(ctx context.Context, containerID string
 		}
 	}
 
-	options := container.CopyToContainerOptions{
+	_, err = s.apiClient().CopyToContainer(ctx, containerID, client.CopyToContainerOptions{
+		DestinationPath:           resolvedDstPath,
+		Content:                   content,
 		AllowOverwriteDirWithFile: false,
-		CopyUIDGID:                opts.CopyUIDGID,
-	}
-	return s.apiClient().CopyToContainer(ctx, containerID, resolvedDstPath, content, options)
+		CopyUIDGID:                options.CopyUIDGID,
+	})
+	return err
 }
 
-func (s *composeService) copyFromContainer(ctx context.Context, containerID, srcPath, dstPath string, opts api.CopyOptions) error {
+func (s *composeService) copyFromContainer(ctx context.Context, containerID, srcPath, dstPath string, options api.CopyOptions) error {
 	var err error
 	if dstPath != "-" {
 		// Get an absolute destination path.
@@ -255,8 +269,14 @@ func (s *composeService) copyFromContainer(ctx context.Context, containerID, src
 
 	// if client requests to follow symbol link, then must decide target file to be copied
 	var rebaseName string
-	if opts.FollowLink {
-		srcStat, err := s.apiClient().ContainerStatPath(ctx, containerID, srcPath)
+	if options.FollowLink {
+		var srcStat container.PathStat
+		res, err := s.apiClient().ContainerStatPath(ctx, containerID, client.ContainerStatPathOptions{
+			Path: srcPath,
+		})
+		if err == nil {
+			srcStat = res.Stat
+		}
 
 		// If the destination is a symbolic link, we should follow it.
 		if err == nil && srcStat.Mode&os.ModeSymlink != 0 {
@@ -272,28 +292,30 @@ func (s *composeService) copyFromContainer(ctx context.Context, containerID, src
 		}
 	}
 
-	content, stat, err := s.apiClient().CopyFromContainer(ctx, containerID, srcPath)
+	res, err := s.apiClient().CopyFromContainer(ctx, containerID, client.CopyFromContainerOptions{
+		SourcePath: srcPath,
+	})
 	if err != nil {
 		return err
 	}
-	defer content.Close() //nolint:errcheck
+	defer res.Content.Close() //nolint:errcheck
 
 	if dstPath == "-" {
-		_, err = io.Copy(s.stdout(), content)
+		_, err = io.Copy(s.stdout(), res.Content)
 		return err
 	}
 
 	srcInfo := archive.CopyInfo{
 		Path:       srcPath,
 		Exists:     true,
-		IsDir:      stat.Mode.IsDir(),
+		IsDir:      res.Stat.Mode.IsDir(),
 		RebaseName: rebaseName,
 	}
 
-	preArchive := content
+	preArchive := res.Content
 	if srcInfo.RebaseName != "" {
 		_, srcBase := archive.SplitPathDirEntry(srcInfo.Path)
-		preArchive = archive.RebaseArchiveEntries(content, srcBase, srcInfo.RebaseName)
+		preArchive = archive.RebaseArchiveEntries(res.Content, srcBase, srcInfo.RebaseName)
 	}
 
 	return archive.CopyTo(preArchive, srcInfo, dstPath)
@@ -317,15 +339,15 @@ func splitCpArg(arg string) (ctr, path string) {
 		return "", arg
 	}
 
-	parts := strings.SplitN(arg, ":", 2)
+	ctr, path, ok := strings.Cut(arg, ":")
 
-	if len(parts) == 1 || strings.HasPrefix(parts[0], ".") {
+	if !ok || strings.HasPrefix(ctr, ".") {
 		// Either there's no `:` in the arg
 		// OR it's an explicit local relative path like `./file:name.txt`.
 		return "", arg
 	}
 
-	return parts[0], parts[1]
+	return ctr, path
 }
 
 func resolveLocalPath(localPath string) (absPath string, err error) {

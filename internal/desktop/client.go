@@ -23,13 +23,50 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
+	"github.com/docker/cli/cli/command"
+	cliflags "github.com/docker/cli/cli/flags"
+	"github.com/moby/moby/client"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/docker/compose/v5/internal"
 	"github.com/docker/compose/v5/internal/memnet"
 )
+
+// EngineLabel is used to detect that Compose is running with a Docker
+// Desktop context. When present, the value is an endpoint address for an
+// in-memory socket (AF_UNIX or named pipe).
+const EngineLabel = "com.docker.desktop.address"
+
+// FeatureLogsTab is the feature flag name for the Docker Desktop Logs view.
+const FeatureLogsTab = "LogsTab"
+
+const logsDeepLink = "docker-desktop://dashboard/logs"
+
+// LogsAppIDMaxLen mirrors the byte-length cap Docker Desktop's URL handler
+// applies to the appId query parameter; values longer than this are
+// truncated by the receiver, so we trim ahead of time to avoid emitting
+// hyperlinks that will be silently shortened. The slice in BuildLogsURL is
+// a byte slice — Compose project names are restricted to the ASCII set
+// `[a-z0-9_-]` by loader.NormalizeProjectName, so a byte cap and a rune
+// cap coincide for any value that could legitimately reach this builder.
+const LogsAppIDMaxLen = 256
+
+// BuildLogsURL returns the deep link that opens Docker Desktop's Logs view,
+// optionally pre-filtered to a Compose project. An empty appID yields the
+// unfiltered URL.
+func BuildLogsURL(appID string) string {
+	if appID == "" {
+		return logsDeepLink
+	}
+	if len(appID) > LogsAppIDMaxLen {
+		appID = appID[:LogsAppIDMaxLen]
+	}
+	q := url.Values{"appId": []string{appID}}
+	return logsDeepLink + "?" + q.Encode()
+}
 
 // identify this client in the logs
 var userAgent = "compose/" + internal.Version
@@ -126,6 +163,53 @@ func (c *Client) FeatureFlags(ctx context.Context) (FeatureFlagResponse, error) 
 		return nil, err
 	}
 	return ret, nil
+}
+
+// IsFeatureEnabled checks the feature flag (GET /features) for a given
+// feature. Returns true when the feature is rolled out.
+func (c *Client) IsFeatureEnabled(ctx context.Context, feature string) (bool, error) {
+	flags, err := c.FeatureFlags(ctx)
+	if err != nil {
+		return false, err
+	}
+	return flags[feature].Enabled, nil
+}
+
+// IsFeatureActive reports whether Docker Desktop is the active engine and the
+// given feature flag is enabled. Returns false silently on any failure — the
+// engine being unreachable, Desktop not being the active engine, or the flag
+// being off — so callers can use this as a single gating check.
+func IsFeatureActive(ctx context.Context, apiClient client.APIClient, feature string) bool {
+	endpoint, err := Endpoint(ctx, apiClient)
+	if err != nil || endpoint == "" {
+		return false
+	}
+
+	c := NewClient(endpoint)
+	defer c.Close() //nolint:errcheck
+
+	enabled, err := c.IsFeatureEnabled(ctx, feature)
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
+// IsFeatureActiveStandalone is the convenience form of IsFeatureActive for
+// callers without an existing engine API client (e.g. the compose plugin hook
+// subprocess). It builds a Docker CLI using the ambient environment to
+// resolve the active context, then delegates to IsFeatureActive.
+func IsFeatureActiveStandalone(ctx context.Context, feature string) bool {
+	dockerCli, err := command.NewDockerCli(command.WithCombinedStreams(io.Discard))
+	if err != nil {
+		return false
+	}
+	if err := dockerCli.Initialize(cliflags.NewClientOptions()); err != nil {
+		return false
+	}
+	defer dockerCli.Client().Close() //nolint:errcheck
+
+	return IsFeatureActive(ctx, dockerCli.Client(), feature)
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {

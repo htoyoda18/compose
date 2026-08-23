@@ -23,23 +23,23 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 	"github.com/sirupsen/logrus"
 
 	"github.com/docker/compose/v5/pkg/api"
 )
 
-func (s *composeService) List(ctx context.Context, opts api.ListOptions) ([]api.Stack, error) {
-	list, err := s.apiClient().ContainerList(ctx, container.ListOptions{
-		Filters: filters.NewArgs(hasProjectLabelFilter(), hasConfigHashLabel()),
-		All:     opts.All,
+func (s *composeService) List(ctx context.Context, options api.ListOptions) ([]api.Stack, error) {
+	list, err := s.apiClient().ContainerList(ctx, client.ContainerListOptions{
+		Filters: make(client.Filters).Add("label", api.ProjectLabel).Add("label", api.ConfigHashLabel),
+		All:     options.All,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return containersToStacks(list)
+	return containersToStacks(list.Items)
 }
 
 func containersToStacks(containers []container.Summary) ([]api.Stack, error) {
@@ -68,10 +68,10 @@ func containersToStacks(containers []container.Summary) ([]api.Stack, error) {
 func combinedConfigFiles(containers []container.Summary) (string, error) {
 	configFiles := []string{}
 
-	for _, c := range containers {
-		files, ok := c.Labels[api.ConfigFilesLabel]
+	for _, ctr := range containers {
+		files, ok := ctr.Labels[api.ConfigFilesLabel]
 		if !ok {
-			return "", fmt.Errorf("no label %q set on container %q of compose project", api.ConfigFilesLabel, c.ID)
+			return "", fmt.Errorf("no label %q set on container %q of compose project", api.ConfigFilesLabel, ctr.ID)
 		}
 
 		for f := range strings.SplitSeq(files, ",") {
@@ -86,8 +86,8 @@ func combinedConfigFiles(containers []container.Summary) (string, error) {
 
 func containerToState(containers []container.Summary) []string {
 	statuses := []string{}
-	for _, c := range containers {
-		statuses = append(statuses, c.State)
+	for _, ctr := range containers {
+		statuses = append(statuses, string(ctr.State))
 	}
 	return statuses
 }
@@ -118,17 +118,17 @@ func combinedStatus(statuses []string) string {
 func groupContainerByLabel(containers []container.Summary, labelName string) (map[string][]container.Summary, []string, error) {
 	containersByLabel := map[string][]container.Summary{}
 	keys := []string{}
-	for _, c := range containers {
-		label, ok := c.Labels[labelName]
+	for _, ctr := range containers {
+		label, ok := ctr.Labels[labelName]
 		if !ok {
-			return nil, nil, fmt.Errorf("no label %q set on container %q of compose project", labelName, c.ID)
+			return nil, nil, fmt.Errorf("no label %q set on container %q of compose project", labelName, ctr.ID)
 		}
 		labelContainers, ok := containersByLabel[label]
 		if !ok {
 			labelContainers = []container.Summary{}
 			keys = append(keys, label)
 		}
-		labelContainers = append(labelContainers, c)
+		labelContainers = append(labelContainers, ctr)
 		containersByLabel[label] = labelContainers
 	}
 	sort.Strings(keys)

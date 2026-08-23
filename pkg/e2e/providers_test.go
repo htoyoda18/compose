@@ -17,48 +17,77 @@
 package e2e
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
-
-	"gotest.tools/v3/assert"
-	"gotest.tools/v3/icmd"
 )
 
-func TestDependsOnMultipleProviders(t *testing.T) {
+// providerScenario creates a scenario whose commands can resolve the
+// example-provider binary from PATH. The provider echoes options back as env
+// variables, which the test service prints with its `env` command — the
+// "test-1  | " log prefix anchors the assertions to the container's output.
+func providerScenario(t *testing.T, intent string) *Scenario {
+	t.Helper()
 	provider, err := findExecutable("example-provider")
-	assert.NilError(t, err)
-
-	path := fmt.Sprintf("%s%s%s", os.Getenv("PATH"), string(os.PathListSeparator), filepath.Dir(provider))
-	c := NewParallelCLI(t, WithEnv("PATH="+path))
-	const projectName = "depends-on-multiple-providers"
-	t.Cleanup(func() {
-		c.cleanupWithDown(t, projectName)
-	})
-
-	res := c.RunDockerComposeCmd(t, "-f", "fixtures/providers/depends-on-multiple-providers.yaml", "--project-name", projectName, "up")
-	res.Assert(t, icmd.Success)
-	env := getEnv(res.Combined(), false)
-	assert.Check(t, slices.Contains(env, "PROVIDER1_URL=https://magic.cloud/provider1"), env)
-	assert.Check(t, slices.Contains(env, "PROVIDER2_URL=https://magic.cloud/provider2"), env)
+	if err != nil {
+		t.Fatalf("example-provider binary not available (run make example-provider): %v", err)
+	}
+	s := NewScenario(t, intent)
+	s.Env("PATH=" + fmt.Sprintf("%s%s%s", filepath.Dir(provider), string(os.PathListSeparator), os.Getenv("PATH")))
+	return s
 }
 
-func getEnv(out string, run bool) []string {
-	var env []string
-	scanner := bufio.NewScanner(strings.NewReader(out))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !run && strings.HasPrefix(line, "test-1  | ") {
-			env = append(env, line[10:])
-		}
-		if run && strings.Contains(line, "=") && len(strings.Split(line, "=")) == 2 {
-			env = append(env, line)
-		}
-	}
-	slices.Sort(env)
-	return env
+func TestProviderStopHook(t *testing.T) {
+	// The example provider writes a sentinel file at PROVIDER_STOP_MARKER when
+	// its stop subcommand runs.
+	marker := filepath.Join(t.TempDir(), "example-provider-stop-marker")
+	providerScenario(t, "stop must invoke the provider binary's stop subcommand").
+		Env("PROVIDER_STOP_MARKER="+marker).
+		Step("up runs the provider then the service",
+			ComposeCmd("up", "-d")).
+		Step("stop triggers the provider's stop subcommand",
+			ComposeCmd("stop"),
+			FileExists(marker))
+}
+
+func TestDependsOnMultipleProviders(t *testing.T) {
+	providerScenario(t, "a service depending on several providers must receive each provider's variables").
+		Step("the service sees both providers' URLs",
+			ComposeCmd("up"),
+			OutputContains("test-1  | PROVIDER1_URL=https://magic.cloud/provider1"),
+			OutputContains("test-1  | PROVIDER2_URL=https://magic.cloud/provider2"))
+}
+
+func TestProviderRawSetEnv(t *testing.T) {
+	providerScenario(t, "setenv variables must be service-prefixed, rawsetenv injected as-is").
+		Step("the service sees both variable flavors",
+			ComposeCmd("up"),
+			OutputContains("test-1  | SECRETS_URL=https://magic.cloud/secrets"),
+			OutputContains("test-1  | CLOUD_REGION=us-east-1"))
+}
+
+func TestProviderRawSetEnvOverridesUserEnv(t *testing.T) {
+	providerScenario(t, "rawsetenv must override a user-defined variable, with a visible warning").
+		Step("the provider's value wins and the override is surfaced",
+			ComposeCmd("up"),
+			OutputContains("test-1  | CLOUD_REGION=us-east-1"),
+			OutputNotContains("test-1  | CLOUD_REGION=user-defined-region"),
+			OutputContains("overrides environment variable"))
+}
+
+func TestProviderRawSetEnvOverridesInheritedEnv(t *testing.T) {
+	providerScenario(t, "rawsetenv must override an inherited passthrough variable, with a visible warning").
+		Step("the provider's value wins over the passthrough",
+			ComposeCmd("up"),
+			OutputContains("test-1  | CLOUD_REGION=us-east-1"),
+			OutputContains("overrides environment variable"))
+}
+
+func TestProviderRawSetEnvOverridesInheritedEnvMapForm(t *testing.T) {
+	providerScenario(t, "rawsetenv must override a map-form passthrough variable, with a visible warning").
+		Step("the provider's value wins over the map-form passthrough",
+			ComposeCmd("up"),
+			OutputContains("test-1  | CLOUD_REGION=us-east-1"),
+			OutputContains("overrides environment variable"))
 }

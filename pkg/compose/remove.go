@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/client"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/docker/compose/v5/pkg/api"
@@ -56,7 +56,7 @@ func (s *composeService) Remove(ctx context.Context, projectName string, options
 	var stoppedContainers Containers
 	for _, ctr := range containers {
 		// We have to inspect containers, as State reported by getContainers suffers a race condition
-		inspected, err := s.apiClient().ContainerInspect(ctx, ctr.ID)
+		inspected, err := s.apiClient().ContainerInspect(ctx, ctr.ID, client.ContainerInspectOptions{})
 		if api.IsNotFoundError(err) {
 			// Already removed. Maybe configured with auto-remove
 			continue
@@ -64,15 +64,15 @@ func (s *composeService) Remove(ctx context.Context, projectName string, options
 		if err != nil {
 			return err
 		}
-		if !inspected.State.Running || (options.Stop && s.dryRun) {
+		if !inspected.Container.State.Running || (options.Stop && s.dryRun) {
 			stoppedContainers = append(stoppedContainers, ctr)
 		}
 	}
 
 	var names []string
-	stoppedContainers.forEach(func(c container.Summary) {
-		names = append(names, getCanonicalContainerName(c))
-	})
+	for _, ctr := range stoppedContainers {
+		names = append(names, getCanonicalContainerName(ctr))
+	}
 
 	if len(names) == 0 {
 		return api.ErrNoResources
@@ -101,7 +101,7 @@ func (s *composeService) remove(ctx context.Context, containers Containers, opti
 		eg.Go(func() error {
 			eventName := getContainerProgressName(ctr)
 			s.events.On(removingEvent(eventName))
-			err := s.apiClient().ContainerRemove(ctx, ctr.ID, container.RemoveOptions{
+			_, err := s.apiClient().ContainerRemove(ctx, ctr.ID, client.ContainerRemoveOptions{
 				RemoveVolumes: options.Volumes,
 				Force:         options.Force,
 			})

@@ -27,31 +27,60 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/cli/cli"
 	cmd "github.com/docker/cli/cli/command/container"
-	"github.com/docker/docker/pkg/stringid"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/events"
+	"github.com/moby/moby/client"
+	"github.com/moby/moby/client/pkg/stringid"
 
 	"github.com/docker/compose/v5/pkg/api"
 )
 
-func (s *composeService) RunOneOffContainer(ctx context.Context, project *types.Project, opts api.RunOptions) (int, error) {
-	containerID, err := s.prepareRun(ctx, project, opts)
+type prepareRunResult struct {
+	containerID string
+	service     types.ServiceConfig
+	created     container.Summary
+}
+
+func (s *composeService) RunOneOffContainer(ctx context.Context, project *types.Project, options api.RunOptions) (int, error) {
+	result, err := s.prepareRun(ctx, project, options)
 	if err != nil {
 		return 0, err
 	}
 
-	// remove cancellable context signal handler so we can forward signals to container without compose from exiting
+	// remove cancellable context signal handler so we can forward signals to container without compose exiting
 	signal.Reset()
 
 	sigc := make(chan os.Signal, 128)
 	signal.Notify(sigc)
-	go cmd.ForwardAllSignals(ctx, s.apiClient(), containerID, sigc)
+	go cmd.ForwardAllSignals(ctx, s.apiClient(), result.containerID, sigc)
 	defer signal.Stop(sigc)
 
+	// If the service has post_start hooks, set up a goroutine that waits for
+	// the container to start and then executes them. This is needed because
+	// cmd.RunStart both starts and attaches to the container in one call,
+	// so we can't run hooks sequentially between start and attach.
+	var hookErrCh chan error
+	if len(result.service.PostStart) > 0 {
+		hookErrCh = make(chan error, 1)
+		go func() {
+			hookErrCh <- s.runPostStartHooksOnEvent(ctx, result.containerID, result.service, result.created)
+		}()
+	}
+
 	err = cmd.RunStart(ctx, s.dockerCli, &cmd.StartOptions{
-		OpenStdin:  !opts.Detach && opts.Interactive,
-		Attach:     !opts.Detach,
-		Containers: []string{containerID},
+		OpenStdin:  !options.Detach && options.Interactive,
+		Attach:     !options.Detach,
+		Containers: []string{result.containerID},
 		DetachKeys: s.configFile().DetachKeys,
 	})
+
+	// Wait for hooks to complete if they were started
+	if hookErrCh != nil {
+		if hookErr := <-hookErrCh; hookErr != nil && err == nil {
+			err = hookErr
+		}
+	}
+
 	var stErr cli.StatusError
 	if errors.As(err, &stErr) {
 		return stErr.StatusCode, nil
@@ -59,29 +88,60 @@ func (s *composeService) RunOneOffContainer(ctx context.Context, project *types.
 	return 0, err
 }
 
-func (s *composeService) prepareRun(ctx context.Context, project *types.Project, opts api.RunOptions) (string, error) {
+// runPostStartHooksOnEvent listens for the container's start event and executes
+// post_start lifecycle hooks once the container is running.
+func (s *composeService) runPostStartHooksOnEvent(ctx context.Context, containerID string, service types.ServiceConfig, ctr container.Summary) error {
+	evtCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	res := s.apiClient().Events(evtCtx, client.EventsListOptions{
+		Filters: make(client.Filters).
+			Add("type", "container").
+			Add("container", containerID).
+			Add("event", string(events.ActionStart)),
+	})
+
+	// Wait for the container start event
+	select {
+	case <-evtCtx.Done():
+		return evtCtx.Err()
+	case err := <-res.Err:
+		return err
+	case <-res.Messages:
+		// Container started, run hooks
+	}
+
+	for _, hook := range service.PostStart {
+		if err := s.runHook(ctx, ctr, service, hook, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *composeService) prepareRun(ctx context.Context, project *types.Project, options api.RunOptions) (prepareRunResult, error) {
 	// Temporary implementation of use_api_socket until we get actual support inside docker engine
 	project, err := s.useAPISocket(project)
 	if err != nil {
-		return "", err
+		return prepareRunResult{}, err
 	}
 
 	err = Run(ctx, func(ctx context.Context) error {
-		return s.startDependencies(ctx, project, opts)
+		return s.startDependencies(ctx, project, options)
 	}, "run", s.events)
 	if err != nil {
-		return "", err
+		return prepareRunResult{}, err
 	}
 
-	service, err := project.GetService(opts.Service)
+	service, err := project.GetService(options.Service)
 	if err != nil {
-		return "", err
+		return prepareRunResult{}, err
 	}
 
-	applyRunOptions(project, &service, opts)
+	applyRunOptions(project, &service, options)
 
-	if err := s.stdin().CheckTty(opts.Interactive, service.Tty); err != nil {
-		return "", err
+	if err := s.stdin().CheckTty(options.Interactive, service.Tty); err != nil {
+		return prepareRunResult{}, err
 	}
 
 	slug := stringid.GenerateRandomID()
@@ -99,98 +159,101 @@ func (s *composeService) prepareRun(ctx context.Context, project *types.Project,
 		Add(api.OneoffLabel, "True")
 
 	// Only ensure image exists for the target service, dependencies were already handled by startDependencies
-	buildOpts := prepareBuildOptions(opts)
-	if err := s.ensureImagesExists(ctx, project, buildOpts, opts.QuietPull); err != nil { // all dependencies already checked, but might miss service img
-		return "", err
+	buildOpts := prepareBuildOptions(options)
+	if err := s.ensureImagesExists(ctx, project, buildOpts, options.QuietPull); err != nil { // all dependencies already checked, but might miss service img
+		return prepareRunResult{}, err
 	}
 
 	observedState, err := s.getContainers(ctx, project.Name, oneOffInclude, true)
 	if err != nil {
-		return "", err
+		return prepareRunResult{}, err
 	}
 
-	if !opts.NoDeps {
+	if !options.NoDeps {
 		if err := s.waitDependencies(ctx, project, service.Name, service.DependsOn, observedState, 0); err != nil {
-			return "", err
+			return prepareRunResult{}, err
 		}
 	}
 	createOpts := createOptions{
-		AutoRemove:        opts.AutoRemove,
-		AttachStdin:       opts.Interactive,
-		UseNetworkAliases: opts.UseNetworkAliases,
+		AutoRemove:        options.AutoRemove,
+		AttachStdin:       options.Interactive,
+		UseNetworkAliases: options.UseNetworkAliases,
 		Labels:            mergeLabels(service.Labels, service.CustomLabels),
 	}
 
-	err = newConvergence(project.ServiceNames(), observedState, nil, nil, s).resolveServiceReferences(&service)
-	if err != nil {
-		return "", err
+	if err := s.resolveRunServiceReferences(ctx, project.Name, &service); err != nil {
+		return prepareRunResult{}, err
 	}
 
-	err = s.ensureModels(ctx, project, opts.QuietPull)
+	err = s.ensureModels(ctx, project, options.QuietPull)
 	if err != nil {
-		return "", err
+		return prepareRunResult{}, err
 	}
 
 	created, err := s.createContainer(ctx, project, service, service.ContainerName, -1, createOpts)
 	if err != nil {
-		return "", err
+		return prepareRunResult{}, err
 	}
 
-	ctr, err := s.apiClient().ContainerInspect(ctx, created.ID)
+	inspect, err := s.apiClient().ContainerInspect(ctx, created.ID, client.ContainerInspectOptions{})
 	if err != nil {
-		return "", err
+		return prepareRunResult{}, err
 	}
 
-	err = s.injectSecrets(ctx, project, service, ctr.ID)
+	err = s.injectSecrets(ctx, project, service, inspect.Container.ID)
 	if err != nil {
-		return created.ID, err
+		return prepareRunResult{containerID: created.ID}, err
 	}
 
-	err = s.injectConfigs(ctx, project, service, ctr.ID)
-	return created.ID, err
+	err = s.injectConfigs(ctx, project, service, inspect.Container.ID)
+	return prepareRunResult{
+		containerID: created.ID,
+		service:     service,
+		created:     created,
+	}, err
 }
 
-func prepareBuildOptions(opts api.RunOptions) *api.BuildOptions {
-	if opts.Build == nil {
+func prepareBuildOptions(options api.RunOptions) *api.BuildOptions {
+	if options.Build == nil {
 		return nil
 	}
 	// Create a copy of build options and restrict to only the target service
-	buildOptsCopy := *opts.Build
-	buildOptsCopy.Services = []string{opts.Service}
-	return &buildOptsCopy
+	buildOptionsCopy := *options.Build
+	buildOptionsCopy.Services = []string{options.Service}
+	return &buildOptionsCopy
 }
 
-func applyRunOptions(project *types.Project, service *types.ServiceConfig, opts api.RunOptions) {
-	service.Tty = opts.Tty
-	service.StdinOpen = opts.Interactive
-	service.ContainerName = opts.Name
+func applyRunOptions(project *types.Project, service *types.ServiceConfig, options api.RunOptions) {
+	service.Tty = options.Tty
+	service.StdinOpen = options.Interactive
+	service.ContainerName = options.Name
 
-	if len(opts.Command) > 0 {
-		service.Command = opts.Command
+	if len(options.Command) > 0 {
+		service.Command = options.Command
 	}
-	if opts.User != "" {
-		service.User = opts.User
+	if options.User != "" {
+		service.User = options.User
 	}
 
-	if len(opts.CapAdd) > 0 {
-		service.CapAdd = append(service.CapAdd, opts.CapAdd...)
-		service.CapDrop = slices.DeleteFunc(service.CapDrop, func(e string) bool { return slices.Contains(opts.CapAdd, e) })
+	if len(options.CapAdd) > 0 {
+		service.CapAdd = append(service.CapAdd, options.CapAdd...)
+		service.CapDrop = slices.DeleteFunc(service.CapDrop, func(e string) bool { return slices.Contains(options.CapAdd, e) })
 	}
-	if len(opts.CapDrop) > 0 {
-		service.CapDrop = append(service.CapDrop, opts.CapDrop...)
-		service.CapAdd = slices.DeleteFunc(service.CapAdd, func(e string) bool { return slices.Contains(opts.CapDrop, e) })
+	if len(options.CapDrop) > 0 {
+		service.CapDrop = append(service.CapDrop, options.CapDrop...)
+		service.CapAdd = slices.DeleteFunc(service.CapAdd, func(e string) bool { return slices.Contains(options.CapDrop, e) })
 	}
-	if opts.WorkingDir != "" {
-		service.WorkingDir = opts.WorkingDir
+	if options.WorkingDir != "" {
+		service.WorkingDir = options.WorkingDir
 	}
-	if opts.Entrypoint != nil {
-		service.Entrypoint = opts.Entrypoint
-		if len(opts.Command) == 0 {
+	if options.Entrypoint != nil {
+		service.Entrypoint = options.Entrypoint
+		if len(options.Command) == 0 {
 			service.Command = []string{}
 		}
 	}
-	if len(opts.Environment) > 0 {
-		cmdEnv := types.NewMappingWithEquals(opts.Environment)
+	if len(options.Environment) > 0 {
+		cmdEnv := types.NewMappingWithEquals(options.Environment)
 		serviceOverrideEnv := cmdEnv.Resolve(func(s string) (string, bool) {
 			v, ok := envResolver(project.Environment)(s)
 			return v, ok
@@ -200,9 +263,17 @@ func applyRunOptions(project *types.Project, service *types.ServiceConfig, opts 
 		}
 		service.Environment.OverrideBy(serviceOverrideEnv)
 	}
-	for k, v := range opts.Labels {
+	for k, v := range options.Labels {
 		service.Labels = service.Labels.Add(k, v)
 	}
+}
+
+func (s *composeService) resolveRunServiceReferences(ctx context.Context, projectName string, service *types.ServiceConfig) error {
+	containersByService, err := s.getContainersByService(ctx, projectName)
+	if err != nil {
+		return err
+	}
+	return resolveServiceReferences(service, containersByService)
 }
 
 func (s *composeService) startDependencies(ctx context.Context, project *types.Project, options api.RunOptions) error {

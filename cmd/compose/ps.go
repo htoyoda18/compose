@@ -50,19 +50,19 @@ func (p *psOptions) parseFilter() error {
 	if p.Filter == "" {
 		return nil
 	}
-	parts := strings.SplitN(p.Filter, "=", 2)
-	if len(parts) != 2 {
+	key, val, ok := strings.Cut(p.Filter, "=")
+	if !ok {
 		return errors.New("arguments to --filter should be in form KEY=VAL")
 	}
-	switch parts[0] {
+	switch key {
 	case "status":
-		p.Status = append(p.Status, parts[1])
+		p.Status = append(p.Status, val)
+		return nil
 	case "source":
 		return api.ErrNotImplemented
 	default:
-		return fmt.Errorf("unknown filter %s", parts[0])
+		return fmt.Errorf("unknown filter %s", key)
 	}
-	return nil
 }
 
 func psCommand(p *ProjectOptions, dockerCli command.Cli, backendOptions *BackendOptions) *cobra.Command {
@@ -81,7 +81,7 @@ func psCommand(p *ProjectOptions, dockerCli command.Cli, backendOptions *Backend
 		ValidArgsFunction: completeServiceNames(dockerCli, p),
 	}
 	flags := psCmd.Flags()
-	flags.StringVar(&opts.Format, "format", "table", cliflags.FormatHelp)
+	flags.StringVar(&opts.Format, "format", "", cliflags.FormatHelp)
 	flags.StringVar(&opts.Filter, "filter", "", "Filter services by a property (supported filters: status)")
 	flags.StringArrayVar(&opts.Status, "status", []string{}, "Filter services by status. Values: [paused | restarting | removing | running | dead | created | exited]")
 	flags.BoolVarP(&opts.Quiet, "quiet", "q", false, "Only display IDs")
@@ -92,7 +92,7 @@ func psCommand(p *ProjectOptions, dockerCli command.Cli, backendOptions *Backend
 	return psCmd
 }
 
-func runPs(ctx context.Context, dockerCli command.Cli, backendOptions *BackendOptions, services []string, opts psOptions) error { //nolint:gocyclo
+func runPs(ctx context.Context, dockerCli command.Cli, backendOptions *BackendOptions, services []string, opts psOptions) error {
 	project, name, err := opts.projectOrName(ctx, dockerCli, services...)
 	if err != nil {
 		return err
@@ -134,16 +134,16 @@ func runPs(ctx context.Context, dockerCli command.Cli, backendOptions *BackendOp
 	})
 
 	if opts.Quiet {
-		for _, c := range containers {
-			_, _ = fmt.Fprintln(dockerCli.Out(), c.ID)
+		for _, ctr := range containers {
+			_, _ = fmt.Fprintln(dockerCli.Out(), ctr.ID)
 		}
 		return nil
 	}
 
 	if opts.Services {
 		services := []string{}
-		for _, c := range containers {
-			s := c.Service
+		for _, ctr := range containers {
+			s := ctr.Service
 			if !slices.Contains(services, s) {
 				services = append(services, s)
 			}
@@ -156,9 +156,13 @@ func runPs(ctx context.Context, dockerCli command.Cli, backendOptions *BackendOp
 		opts.Format = dockerCli.ConfigFile().PsFormat
 	}
 
+	showEngine := slices.ContainsFunc(containers, func(c api.ContainerSummary) bool {
+		return c.Labels[api.ContainerEngineLabel] != ""
+	})
+
 	containerCtx := cliformatter.Context{
 		Output: dockerCli.Out(),
-		Format: formatter.NewContainerFormat(opts.Format, opts.Quiet, false),
+		Format: formatter.NewContainerFormat(opts.Format, opts.Quiet, false, showEngine),
 		Trunc:  !opts.noTrunc,
 	}
 	return formatter.ContainerWrite(containerCtx, containers)
@@ -166,19 +170,10 @@ func runPs(ctx context.Context, dockerCli command.Cli, backendOptions *BackendOp
 
 func filterByStatus(containers []api.ContainerSummary, statuses []string) []api.ContainerSummary {
 	var filtered []api.ContainerSummary
-	for _, c := range containers {
-		if hasStatus(c, statuses) {
-			filtered = append(filtered, c)
+	for _, ctr := range containers {
+		if slices.Contains(statuses, string(ctr.State)) {
+			filtered = append(filtered, ctr)
 		}
 	}
 	return filtered
-}
-
-func hasStatus(c api.ContainerSummary, statuses []string) bool {
-	for _, status := range statuses {
-		if c.State == status {
-			return true
-		}
-	}
-	return false
 }

@@ -22,16 +22,17 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	cp "github.com/otiai10/copy"
-	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/icmd"
 	"gotest.tools/v3/poll"
@@ -148,7 +149,7 @@ func initializePlugins(t testing.TB, configDir string) {
 		}
 	})
 
-	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "cli-plugins"), 0o755),
+	assert.NilError(t, os.MkdirAll(filepath.Join(configDir, "cli-plugins"), 0o755),
 		"Failed to create cli-plugins directory")
 	composePlugin, err := findExecutable(DockerComposeExecutableName)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -178,11 +179,11 @@ func initializePlugins(t testing.TB, configDir string) {
 func initializeContextDir(t testing.TB, configDir string) {
 	dockerUserDir := ".docker/contexts"
 	userDir, err := os.UserHomeDir()
-	require.NoError(t, err, "Failed to get user home directory")
+	assert.NilError(t, err, "Failed to get user home directory")
 	userContextsDir := filepath.Join(userDir, dockerUserDir)
 	if checkExists(userContextsDir) {
 		dstContexts := filepath.Join(configDir, "contexts")
-		require.NoError(t, cp.Copy(userContextsDir, dstContexts), "Failed to copy contexts directory")
+		assert.NilError(t, cp.Copy(userContextsDir, dstContexts), "Failed to copy contexts directory")
 	}
 }
 
@@ -249,17 +250,17 @@ func CopyFile(t testing.TB, sourceFile string, destinationFile string) {
 	t.Helper()
 
 	src, err := os.Open(sourceFile)
-	require.NoError(t, err, "Failed to open source file: %s")
+	assert.NilError(t, err, "Failed to open source file: %s")
 	//nolint:errcheck
 	defer src.Close()
 
 	dst, err := os.OpenFile(destinationFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o755)
-	require.NoError(t, err, "Failed to open destination file: %s", destinationFile)
+	assert.NilError(t, err, "Failed to open destination file: %s", destinationFile)
 	//nolint:errcheck
 	defer dst.Close()
 
 	_, err = io.Copy(dst, src)
-	require.NoError(t, err, "Failed to copy file: %s", sourceFile)
+	assert.NilError(t, err, "Failed to copy file: %s", sourceFile)
 }
 
 // BaseEnvironment provides the minimal environment variables used across all
@@ -394,19 +395,12 @@ func (c *CLI) NewDockerComposeCmd(t testing.TB, args ...string) icmd.Cmd {
 func ComposeStandalonePath(t testing.TB) string {
 	t.Helper()
 	if !composeStandaloneMode {
-		require.Fail(t, "Not running in standalone mode")
+		t.Fatal("Not running in standalone mode")
 	}
 	composeBinary, err := findExecutable(DockerComposeExecutableName)
-	require.NoError(t, err, "Could not find standalone Compose binary (%q)",
+	assert.NilError(t, err, "Could not find standalone Compose binary (%q)",
 		DockerComposeExecutableName)
 	return composeBinary
-}
-
-// StdoutContains returns a predicate on command result expecting a string in stdout
-func StdoutContains(expected string) func(*icmd.Result) bool {
-	return func(res *icmd.Result) bool {
-		return strings.Contains(res.Stdout(), expected)
-	}
 }
 
 func IsHealthy(service string) func(res *icmd.Result) bool {
@@ -517,4 +511,43 @@ func HTTPGetWithRetry(
 func (c *CLI) cleanupWithDown(t testing.TB, project string, args ...string) {
 	t.Helper()
 	c.RunDockerComposeCmd(t, append([]string{"-p", project, "down", "-v", "--remove-orphans"}, args...)...)
+}
+
+// ServicePublishedPort returns the ephemeral host port mapped to targetPort
+// on the named service in the given compose project. It requires the service
+// to be already running. The test fails immediately if the mapping cannot be
+// resolved.
+func (c *CLI) ServicePublishedPort(t testing.TB, project, service string, targetPort int) int {
+	t.Helper()
+	res := c.RunDockerComposeCmd(t, "-p", project, "port", service, strconv.Itoa(targetPort))
+	addr := strings.TrimSpace(res.Stdout())
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("ServicePublishedPort: cannot parse compose port output %q: %v", addr, err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("ServicePublishedPort: invalid port number %q: %v", portStr, err)
+	}
+	return port
+}
+
+// BuilderName returns a buildx builder name that is unique to the test,
+// preventing container-name collisions when tests run in parallel on the
+// same Docker daemon.
+func BuilderName(t testing.TB, base string) string {
+	t.Helper()
+	safe := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			return r
+		default:
+			return '-'
+		}
+	}, t.Name())
+	name := base + "-" + safe
+	if len(name) > 60 {
+		name = strings.TrimRight(name[:60], "-")
+	}
+	return name
 }

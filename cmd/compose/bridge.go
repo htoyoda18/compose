@@ -22,10 +22,11 @@ import (
 	"io"
 
 	"github.com/distribution/reference"
+	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/go-units"
+	"github.com/moby/moby/api/types/image"
+	"github.com/moby/moby/client/pkg/stringid"
 	"github.com/spf13/cobra"
 
 	"github.com/docker/compose/v5/cmd/formatter"
@@ -51,6 +52,7 @@ func convertCommand(p *ProjectOptions, dockerCli command.Cli) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "convert",
 		Short: "Convert compose files to Kubernetes manifests, Helm charts, or another model",
+		Args:  cobra.NoArgs,
 		RunE: Adapt(func(ctx context.Context, args []string) error {
 			return runConvert(ctx, dockerCli, p, convertOpts)
 		}),
@@ -93,6 +95,7 @@ func listTransformersCommand(dockerCli command.Cli) *cobra.Command {
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List available transformations",
+		Args:    cobra.NoArgs,
 		RunE: Adapt(func(ctx context.Context, args []string) error {
 			transformers, err := bridge.ListTransformers(ctx, dockerCli)
 			if err != nil {
@@ -145,6 +148,7 @@ func createTransformerCommand(dockerCli command.Cli) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create [OPTION] PATH",
 		Short: "Create a new transformation",
+		Args:  cli.ExactArgs(1),
 		RunE: Adapt(func(ctx context.Context, args []string) error {
 			opts.Dest = args[0]
 			return bridge.CreateTransformer(ctx, dockerCli, opts)

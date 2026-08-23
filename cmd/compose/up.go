@@ -83,7 +83,7 @@ func (opts upOptions) apply(project *types.Project, services []string) (*types.P
 	return project, nil
 }
 
-func (opts *upOptions) validateNavigationMenu(dockerCli command.Cli) {
+func (opts *upOptions) resolveNavigationMenu(dockerCli command.Cli) {
 	if !dockerCli.Out().IsTerminal() {
 		opts.navigationMenu = false
 		return
@@ -135,7 +135,7 @@ func upCommand(p *ProjectOptions, dockerCli command.Cli, backendOptions *Backend
 				return errors.New("cannot combine --attach and --attach-dependencies")
 			}
 
-			up.validateNavigationMenu(dockerCli)
+			up.resolveNavigationMenu(dockerCli)
 
 			if !p.All && len(project.Services) == 0 {
 				return fmt.Errorf("no service selected")
@@ -186,8 +186,10 @@ func upCommand(p *ProjectOptions, dockerCli command.Cli, backendOptions *Backend
 	return upCmd
 }
 
-//nolint:gocyclo
 func validateFlags(up *upOptions, create *createOptions) error {
+	if up.waitTimeout < 0 {
+		return fmt.Errorf("--wait-timeout must be a non-negative integer")
+	}
 	if up.exitCodeFrom != "" && !up.cascadeFail {
 		up.cascadeStop = true
 	}
@@ -225,7 +227,6 @@ func validateFlags(up *upOptions, create *createOptions) error {
 	return nil
 }
 
-//nolint:gocyclo
 func runUp(
 	ctx context.Context,
 	dockerCli command.Cli,
@@ -328,7 +329,10 @@ func runUp(
 		attach = attachSet.Elements()
 	}
 
-	timeout := time.Duration(upOptions.waitTimeout) * time.Second
+	var timeout time.Duration
+	if upOptions.waitTimeout > 0 {
+		timeout = time.Duration(upOptions.waitTimeout) * time.Second
+	}
 	return backend.Up(ctx, project, api.UpOptions{
 		Create: create,
 		Start: api.StartOptions{
@@ -341,17 +345,7 @@ func runUp(
 			WaitTimeout:    timeout,
 			Watch:          upOptions.watch,
 			Services:       services,
-			NavigationMenu: upOptions.navigationMenu && display.Mode != "plain" && dockerCli.In().IsTerminal(),
+			NavigationMenu: upOptions.navigationMenu && display.Mode != display.ModePlain && dockerCli.In().IsTerminal(),
 		},
 	})
-}
-
-func setServiceScale(project *types.Project, name string, replicas int) error {
-	service, err := project.GetService(name)
-	if err != nil {
-		return err
-	}
-	service.SetScale(replicas)
-	project.Services[name] = service
-	return nil
 }

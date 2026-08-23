@@ -24,8 +24,9 @@ import (
 	"strconv"
 
 	"github.com/compose-spec/compose-go/v2/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/docker/compose/v5/pkg/api"
 )
@@ -41,33 +42,46 @@ const (
 	oneOffOnly
 )
 
-func (s *composeService) getContainers(ctx context.Context, project string, oneOff oneOff, all bool, selectedServices ...string) (Containers, error) {
-	var containers Containers
-	f := getDefaultFilters(project, oneOff, selectedServices...)
-	containers, err := s.apiClient().ContainerList(ctx, container.ListOptions{
-		Filters: filters.NewArgs(f...),
+func (s *composeService) getContainers(ctx context.Context, projectName string, oneOff oneOff, all bool, selectedServices ...string) (Containers, error) {
+	res, err := s.apiClient().ContainerList(ctx, client.ContainerListOptions{
+		Filters: getDefaultFilters(projectName, oneOff, selectedServices...),
 		All:     all,
 	})
 	if err != nil {
 		return nil, err
 	}
+	containers := Containers(res.Items)
 	if len(selectedServices) > 1 {
 		containers = containers.filter(isService(selectedServices...))
 	}
 	return containers, nil
 }
 
-func getDefaultFilters(projectName string, oneOff oneOff, selectedServices ...string) []filters.KeyValuePair {
-	f := []filters.KeyValuePair{projectFilter(projectName)}
-	if len(selectedServices) == 1 {
-		f = append(f, serviceFilter(selectedServices[0]))
+// getContainersByService returns all non-oneoff containers for the project, grouped by service name.
+func (s *composeService) getContainersByService(ctx context.Context, projectName string) (map[string]Containers, error) {
+	all, err := s.getContainers(ctx, projectName, oneOffExclude, true)
+	if err != nil {
+		return nil, err
 	}
-	f = append(f, hasConfigHashLabel())
+	result := map[string]Containers{}
+	for _, ctr := range all.filter(isNotOneOff) {
+		serviceName := ctr.Labels[api.ServiceLabel]
+		result[serviceName] = append(result[serviceName], ctr)
+	}
+	return result, nil
+}
+
+func getDefaultFilters(projectName string, oneOff oneOff, selectedServices ...string) client.Filters {
+	f := projectFilter(projectName)
+	if len(selectedServices) == 1 {
+		f.Add("label", serviceFilter(selectedServices[0]))
+	}
+	f.Add("label", api.ConfigHashLabel)
 	switch oneOff {
 	case oneOffOnly:
-		f = append(f, oneOffFilter(true))
+		f.Add("label", oneOffFilter(true))
 	case oneOffExclude:
-		f = append(f, oneOffFilter(false))
+		f.Add("label", oneOffFilter(false))
 	case oneOffInclude:
 	}
 	return f
@@ -76,17 +90,16 @@ func getDefaultFilters(projectName string, oneOff oneOff, selectedServices ...st
 func (s *composeService) getSpecifiedContainer(ctx context.Context, projectName string, oneOff oneOff, all bool, serviceName string, containerIndex int) (container.Summary, error) {
 	defaultFilters := getDefaultFilters(projectName, oneOff, serviceName)
 	if containerIndex > 0 {
-		defaultFilters = append(defaultFilters, containerNumberFilter(containerIndex))
+		defaultFilters.Add("label", containerNumberFilter(containerIndex))
 	}
-	containers, err := s.apiClient().ContainerList(ctx, container.ListOptions{
-		Filters: filters.NewArgs(
-			defaultFilters...,
-		),
-		All: all,
+	res, err := s.apiClient().ContainerList(ctx, client.ContainerListOptions{
+		Filters: defaultFilters,
+		All:     all,
 	})
 	if err != nil {
 		return container.Summary{}, err
 	}
+	containers := res.Items
 	if len(containers) < 1 {
 		if containerIndex > 0 {
 			return container.Summary{}, fmt.Errorf("service %q is not running container #%d", serviceName, containerIndex)
@@ -149,31 +162,33 @@ func isNotOneOff(c container.Summary) bool {
 	return !ok || v == "False"
 }
 
+func isNotRunning(c container.Summary) bool {
+	return c.State != container.StateRunning
+}
+
 // filter return Containers with elements to match predicate
 func (containers Containers) filter(predicates ...containerPredicate) Containers {
 	var filtered Containers
-	for _, c := range containers {
-		if matches(c, predicates...) {
-			filtered = append(filtered, c)
+	for _, ctr := range containers {
+		if matches(ctr, predicates...) {
+			filtered = append(filtered, ctr)
 		}
 	}
 	return filtered
 }
 
-func (containers Containers) names() []string {
-	var names []string
-	for _, c := range containers {
-		names = append(names, getCanonicalContainerName(c))
+// forEachContainerConcurrent runs fn for every container concurrently and waits for all goroutines.
+func forEachContainerConcurrent(ctx context.Context, containers Containers, fn func(context.Context, container.Summary) error) error {
+	eg, ctx := errgroup.WithContext(ctx)
+	for _, ctr := range containers {
+		eg.Go(func() error {
+			return fn(ctx, ctr)
+		})
 	}
-	return names
+	return eg.Wait()
 }
 
-func (containers Containers) forEach(fn func(container.Summary)) {
-	for _, c := range containers {
-		fn(c)
-	}
-}
-
+// sorted sorts containers in place by canonical name and returns the (same) slice.
 func (containers Containers) sorted() Containers {
 	sort.Slice(containers, func(i, j int) bool {
 		return getCanonicalContainerName(containers[i]) < getCanonicalContainerName(containers[j])

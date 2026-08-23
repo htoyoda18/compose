@@ -21,20 +21,20 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
 
 	"github.com/docker/compose/v5/pkg/api"
 )
 
-func (s *composeService) Port(ctx context.Context, projectName string, service string, port uint16, options api.PortOptions) (string, int, error) {
+func (s *composeService) Port(ctx context.Context, projectName string, serviceName string, port uint16, options api.PortOptions) (string, int, error) {
 	projectName = strings.ToLower(projectName)
-	ctr, err := s.getSpecifiedContainer(ctx, projectName, oneOffInclude, false, service, options.Index)
+	ctr, err := s.getSpecifiedContainer(ctx, projectName, oneOffInclude, false, serviceName, options.Index)
 	if err != nil {
 		return "", 0, err
 	}
 	for _, p := range ctr.Ports {
 		if p.PrivatePort == port && p.Type == options.Protocol {
-			return p.IP, int(p.PublicPort), nil
+			return p.IP.String(), int(p.PublicPort), nil
 		}
 	}
 	return "", 0, portNotFoundError(options.Protocol, port, ctr)
@@ -47,7 +47,7 @@ func portNotFoundError(protocol string, port uint16, ctr container.Summary) erro
 
 	var containerPorts []string
 	for _, p := range ctr.Ports {
-		containerPorts = append(containerPorts, formatPort(p.Type, p.PublicPort))
+		containerPorts = append(containerPorts, formatPort(p.Type, p.PrivatePort))
 	}
 
 	name := strings.TrimPrefix(ctr.Names[0], "/")

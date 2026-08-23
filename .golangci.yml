@@ -3,13 +3,21 @@ run:
   concurrency: 2
 linters:
   default: none
+  disable:
+    # gocognit deliberately replaced gocyclo — do not re-enable. Cyclomatic
+    # complexity charges a flat guard clause the same as a nested branch, so
+    # our fail-fast style accumulated //nolint suppressions on functions that
+    # are long but flat. Cognitive complexity penalizes nesting and barely
+    # charges early returns, keeping the signal on genuinely tangled code.
+    - gocyclo
   enable:
     - copyloopvar
     - depguard
     - errcheck
     - errorlint
+    - forbidigo
+    - gocognit
     - gocritic
-    - gocyclo
     - gomodguard
     - govet
     - ineffassign
@@ -38,6 +46,21 @@ linters:
               desc: use stdlib slices package
             - pkg: gopkg.in/yaml.v2
               desc: compose-go uses yaml.v3
+            - pkg: github.com/stretchr/testify/assert
+              desc: Use "gotest.tools/v3/assert" instead
+            - pkg: github.com/stretchr/testify/require
+              desc: Use "gotest.tools/v3/assert" instead
+            - pkg: github.com/stretchr/testify/suite
+              desc: Do not use
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: 'context\.Background'
+          pkg: '^context$'
+          msg: "in tests, use t.Context() instead of context.Background()"
+        - pattern: 'context\.TODO'
+          pkg: '^context$'
+          msg: "in tests, use t.Context() instead of context.TODO()"
     gocritic:
       disabled-checks:
         - paramTypeCombine
@@ -47,8 +70,8 @@ linters:
         - diagnostic
         - opinionated
         - style
-    gocyclo:
-      min-complexity: 16
+    gocognit:
+      min-complexity: 30
     gomodguard:
       blocked:
         modules:
@@ -74,6 +97,10 @@ linters:
       - third_party$
       - builtin$
       - examples$
+    rules:
+      - path-except: '_test\.go'
+        linters:
+          - forbidigo
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

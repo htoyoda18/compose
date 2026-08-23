@@ -30,11 +30,12 @@ import (
 	"github.com/containerd/errdefs"
 	"github.com/docker/cli/cli/command"
 	cli "github.com/docker/cli/cli/command/container"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/pkg/jsonmessage"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/image"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
+	"github.com/moby/moby/client/pkg/jsonmessage"
+	"github.com/sirupsen/logrus"
 	"go.yaml.in/yaml/v4"
 
 	"github.com/docker/compose/v5/pkg/api"
@@ -85,7 +86,17 @@ func convert(ctx context.Context, dockerCli command.Cli, model map[string]any, o
 		return err
 	}
 
-	dir := os.TempDir()
+	dir, err := os.MkdirTemp("", "compose-convert-*")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err := os.RemoveAll(dir)
+		if err != nil {
+			logrus.Warnf("failed to remove temp dir %s: %v", dir, err)
+		}
+	}()
+
 	composeYaml := filepath.Join(dir, "compose.yaml")
 	err = os.WriteFile(composeYaml, raw, 0o600)
 	if err != nil {
@@ -127,10 +138,14 @@ func convert(ctx context.Context, dockerCli command.Cli, model map[string]any, o
 			}
 			containerConfig.User = usr.Uid
 		}
-		created, err := dockerCli.Client().ContainerCreate(ctx, containerConfig, &container.HostConfig{
-			AutoRemove: true,
-			Binds:      binds,
-		}, &network.NetworkingConfig{}, nil, "")
+		created, err := dockerCli.Client().ContainerCreate(ctx, client.ContainerCreateOptions{
+			Config: containerConfig,
+			HostConfig: &container.HostConfig{
+				Binds:      binds,
+				AutoRemove: true,
+			},
+			NetworkingConfig: &network.NetworkingConfig{},
+		})
 		if err != nil {
 			return err
 		}
@@ -149,23 +164,11 @@ func convert(ctx context.Context, dockerCli command.Cli, model map[string]any, o
 // LoadAdditionalResources loads additional resources from the project, such as image references, secrets, configs and exposed ports
 func LoadAdditionalResources(ctx context.Context, dockerCLI command.Cli, project *types.Project) (*types.Project, error) {
 	for name, service := range project.Services {
-		imageName := api.GetImageNameOrDefault(service, project.Name)
-
-		inspect, err := inspectWithPull(ctx, dockerCLI, imageName)
+		updated, err := loadServiceImageResources(ctx, dockerCLI, project.Name, name, service)
 		if err != nil {
 			return nil, err
 		}
-		service.Image = imageName
-		exposed := utils.Set[string]{}
-		exposed.AddAll(service.Expose...)
-		for port := range inspect.Config.ExposedPorts {
-			exposed.Add(nat.Port(port).Port())
-		}
-		for _, port := range service.Ports {
-			exposed.Add(strconv.Itoa(int(port.Target)))
-		}
-		service.Expose = exposed.Elements()
-		project.Services[name] = service
+		project.Services[name] = updated
 	}
 
 	for name, secret := range project.Secrets {
@@ -185,6 +188,51 @@ func LoadAdditionalResources(ctx context.Context, dockerCLI command.Cli, project
 	}
 
 	return project, nil
+}
+
+// loadServiceImageResources resolves the service image and merges the ports
+// it exposes into the service's Expose list
+func loadServiceImageResources(ctx context.Context, dockerCLI command.Cli, projectName, name string, service types.ServiceConfig) (types.ServiceConfig, error) {
+	imageName := api.GetImageNameOrDefault(service, projectName)
+
+	inspect, err := inspectServiceImage(ctx, dockerCLI, name, imageName, service)
+	if err != nil {
+		return service, err
+	}
+
+	service.Image = imageName
+	exposed := utils.Set[string]{}
+	exposed.AddAll(service.Expose...)
+	if inspect.Config != nil {
+		for port := range inspect.Config.ExposedPorts {
+			p, err := network.ParsePort(port)
+			if err != nil {
+				return service, err
+			}
+			exposed.Add(strconv.Itoa(int(p.Num())))
+		}
+	}
+	for _, port := range service.Ports {
+		exposed.Add(strconv.Itoa(int(port.Target)))
+	}
+	service.Expose = exposed.Elements()
+	return service, nil
+}
+
+// inspectServiceImage inspects the service image, pulling it when needed; a
+// buildable image missing locally only degrades to a warning
+func inspectServiceImage(ctx context.Context, dockerCLI command.Cli, name, imageName string, service types.ServiceConfig) (image.InspectResponse, error) {
+	if service.Build != nil && service.Image == "" {
+		result, err := dockerCLI.Client().ImageInspect(ctx, imageName)
+		if err != nil {
+			if !errdefs.IsNotFound(err) {
+				return image.InspectResponse{}, err
+			}
+			logrus.Warnf("image %s for service %s not found locally; Dockerfile-exposed ports will not be included — run `docker compose build` first to include them", imageName, name)
+		}
+		return result.InspectResponse, nil
+	}
+	return inspectWithPull(ctx, dockerCLI, imageName)
 }
 
 func loadFileObject(conf types.FileObjectConfig) (types.FileObjectConfig, error) {
@@ -207,13 +255,14 @@ func inspectWithPull(ctx context.Context, dockerCli command.Cli, imageName strin
 	inspect, err := dockerCli.Client().ImageInspect(ctx, imageName)
 	if errdefs.IsNotFound(err) {
 		var stream io.ReadCloser
-		stream, err = dockerCli.Client().ImagePull(ctx, imageName, image.PullOptions{})
+		stream, err = dockerCli.Client().ImagePull(ctx, imageName, client.ImagePullOptions{})
 		if err != nil {
 			return image.InspectResponse{}, err
 		}
 		defer func() { _ = stream.Close() }()
 
-		err = jsonmessage.DisplayJSONMessagesToStream(stream, dockerCli.Out(), nil)
+		out := dockerCli.Out()
+		err = jsonmessage.DisplayJSONMessagesStream(stream, out, out.FD(), out.IsTerminal(), nil)
 		if err != nil {
 			return image.InspectResponse{}, err
 		}
@@ -221,5 +270,5 @@ func inspectWithPull(ctx context.Context, dockerCli command.Cli, imageName strin
 			return image.InspectResponse{}, err
 		}
 	}
-	return inspect, err
+	return inspect.InspectResponse, err
 }

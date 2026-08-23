@@ -18,12 +18,15 @@ package compose
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/cli/opts"
+	"github.com/moby/moby/client"
 	"github.com/spf13/cobra"
 
 	"github.com/docker/compose/v5/cmd/formatter"
@@ -61,11 +64,32 @@ var acceptedListFilters = map[string]bool{
 	"name": true,
 }
 
+// match returns true if any of the values at key match the source string
+func match(filters client.Filters, field, source string) bool {
+	if f, ok := filters[field]; ok && f[source] {
+		return true
+	}
+
+	fieldValues := filters[field]
+	for name2match := range fieldValues {
+		isMatch, err := regexp.MatchString(name2match, source)
+		if err != nil {
+			continue
+		}
+		if isMatch {
+			return true
+		}
+	}
+	return false
+}
+
 func runList(ctx context.Context, dockerCli command.Cli, backendOptions *BackendOptions, lsOpts lsOptions) error {
 	filters := lsOpts.Filter.Value()
-	err := filters.Validate(acceptedListFilters)
-	if err != nil {
-		return err
+
+	for filter := range filters {
+		if _, ok := acceptedListFilters[filter]; !ok {
+			return errors.New("invalid filter '" + filter + "'")
+		}
 	}
 
 	backend, err := compose.NewComposeService(dockerCli, backendOptions.Options...)
@@ -77,13 +101,12 @@ func runList(ctx context.Context, dockerCli command.Cli, backendOptions *Backend
 		return err
 	}
 
-	if filters.Len() > 0 {
+	if len(filters) > 0 {
 		var filtered []api.Stack
 		for _, s := range stackList {
-			if filters.Contains("name") && !filters.Match("name", s.Name) {
-				continue
+			if match(filters, "name", s.Name) {
+				filtered = append(filtered, s)
 			}
-			filtered = append(filtered, s)
 		}
 		stackList = filtered
 	}
@@ -95,7 +118,14 @@ func runList(ctx context.Context, dockerCli command.Cli, backendOptions *Backend
 		return nil
 	}
 
-	view := viewFromStackList(stackList)
+	view := make([]stackView, len(stackList))
+	for i, s := range stackList {
+		view[i] = stackView{
+			Name:        s.Name,
+			Status:      strings.TrimSpace(s.Status + " " + s.Reason),
+			ConfigFiles: s.ConfigFiles,
+		}
+	}
 	return formatter.Print(view, lsOpts.Format, dockerCli.Out(), func(w io.Writer) {
 		for _, stack := range view {
 			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", stack.Name, stack.Status, stack.ConfigFiles)
@@ -107,16 +137,4 @@ type stackView struct {
 	Name        string
 	Status      string
 	ConfigFiles string
-}
-
-func viewFromStackList(stackList []api.Stack) []stackView {
-	retList := make([]stackView, len(stackList))
-	for i, s := range stackList {
-		retList[i] = stackView{
-			Name:        s.Name,
-			Status:      strings.TrimSpace(fmt.Sprintf("%s %s", s.Status, s.Reason)),
-			ConfigFiles: s.ConfigFiles,
-		}
-	}
-	return retList
 }

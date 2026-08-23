@@ -1,5 +1,8 @@
 name: ci
 
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -18,28 +21,7 @@ on:
         required: false
         default: "false"
 
-permissions:
-  contents: read # to fetch code (actions/checkout)
-
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.platforms.outputs.matrix }}
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v4
-      -
-        name: Create matrix
-        id: platforms
-        run: |
-          echo matrix=$(docker buildx bake binary-cross --print | jq -cr '.target."binary-cross".platforms') >> $GITHUB_OUTPUT
-      -
-        name: Show matrix
-        run: |
-          echo ${{ steps.platforms.outputs.matrix }}
-
   validate:
     runs-on: ubuntu-latest
     strategy:
@@ -50,85 +32,119 @@ jobs:
           - validate-go-mod
           - validate-headers
           - validate-docs
+          - validate-mocks
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       -
         name: Run
         run: |
           make ${{ matrix.target }}
 
   binary:
+    uses: docker/github-builder/.github/workflows/bake.yml@a492c6d04fd3315f67230809b44d60cc0acd50b3 # v1.16.0
+    permissions:
+      contents: read # same as global permission
+      id-token: write # for signing attestation(s) with GitHub OIDC Token
+    with:
+      runner: amd64
+      artifact-name: compose
+      artifact-upload: true
+      cache: true
+      cache-scope: binary
+      target: release
+      output: local
+      sbom: true
+      sign: ${{ github.event_name != 'pull_request' }}
+
+  binary-finalize:
     runs-on: ubuntu-latest
     needs:
-      - prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: ${{ fromJson(needs.prepare.outputs.matrix) }}
+      - binary
     steps:
       -
-        name: Checkout
-        uses: actions/checkout@v4
-      -
-        name: Prepare
-        run: |
-          platform=${MATRIX_PLATFORM}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-        env:
-          MATRIX_PLATFORM: ${{ matrix.platform }}
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      -
-        name: Build
-        uses: docker/bake-action@v6
+        name: Download artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          source: .
-          targets: release
-          provenance: mode=max
-          sbom: true
-          set: |
-            *.platform=${{ matrix.platform }}
-            *.cache-from=type=gha,scope=binary-${{ env.PLATFORM_PAIR }}
-            *.cache-to=type=gha,scope=binary-${{ env.PLATFORM_PAIR }},mode=max
+          path: /tmp/compose-output
+          name: ${{ needs.binary.outputs.artifact-name }}
       -
         name: Rename provenance and sbom
+        run: |
+          for pdir in /tmp/compose-output/*/; do
+            (
+              cd "$pdir"
+              binname=$(find . -name 'docker-compose-*')
+              filename=$(basename "${binname%.exe}")
+              mv "provenance.json" "${filename}.provenance.json"
+              mv "sbom-binary.spdx.json" "${filename}.sbom.json"
+              find . -name 'sbom*.json' -exec rm {} \;
+              if [ -f "provenance.sigstore.json" ]; then
+                mv "provenance.sigstore.json" "${filename}.sigstore.json"
+              fi
+            )
+          done
+          mkdir -p "./bin/release"
+          mv /tmp/compose-output/**/* "./bin/release/"
+      -
+        name: Create checksum file
         working-directory: ./bin/release
         run: |
-          binname=$(find . -name 'docker-compose-*')
-          filename=$(basename "$binname" | sed -E 's/\.exe$//')
-          mv "provenance.json" "${filename}.provenance.json"
-          mv "sbom-binary.spdx.json" "${filename}.sbom.json"
-          find . -name 'sbom*.json' -exec rm {} \;
+          find . -type f -print0 | sort -z | xargs -r0 shasum -a 256 -b | sed 's# \*\./# *#' > $RUNNER_TEMP/checksums.txt
+          shasum -a 256 -U -c $RUNNER_TEMP/checksums.txt
+          mv $RUNNER_TEMP/checksums.txt .
+          cat checksums.txt | while read sum file; do
+            if [[ "${file#\*}" == docker-compose-* && "${file#\*}" != *.provenance.json && "${file#\*}" != *.sbom.json && "${file#\*}" != *.sigstore.json ]]; then
+              echo "$sum $file" > ${file#\*}.sha256
+            fi
+          done
       -
         name: List artifacts
         run: |
           tree -nh ./bin/release
       -
+        name: Check artifacts
+        run: |
+          find bin/release -type f -exec file -e ascii -- {} +
+      -
         name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: compose-${{ env.PLATFORM_PAIR }}
-          path: ./bin/release
+          name: release
+          path: ./bin/release/*
           if-no-files-found: error
+
+  bin-image-test:
+    if: github.event_name == 'pull_request'
+    uses: docker/github-builder/.github/workflows/bake.yml@a492c6d04fd3315f67230809b44d60cc0acd50b3 # v1.16.0
+    with:
+      runner: amd64
+      target: image-cross
+      cache: true
+      cache-scope: bin-image-test
+      output: image
+      push: false
+      sbom: true
+      set-meta-labels: true
+      meta-images: |
+        compose-bin
+      meta-tags: |
+        type=ref,event=pr
+      meta-bake-target: meta-helper
 
   test:
     runs-on: ubuntu-latest
     steps:
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       -
         name: Test
-        uses: docker/bake-action@v6
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         with:
           targets: test
           set: |
@@ -136,48 +152,63 @@ jobs:
             *.cache-to=type=gha,scope=test
       -
         name: Gather coverage data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-data-unit
           path: bin/coverage/unit/
           if-no-files-found: error
       - 
         name: Unit Test Summary
-        uses: test-summary/action@v2
+        uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
         with:
           paths: bin/coverage/unit/report.xml       
         if: always()
+
   e2e:
     runs-on: ubuntu-latest
-    name: e2e (${{ matrix.mode }}, ${{ matrix.channel }})
+    name: e2e (${{ matrix.mode }}, ${{ matrix.channel }}, ${{ matrix.store }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          # current stable
+          # current stable, both image store backends: several digest-identity
+          # bugs only manifest on one of them (graphdriver vs containerd)
           - mode: plugin
             engine: 29
             channel: stable
+            store: graphdriver
+          - mode: plugin
+            engine: 29
+            channel: stable
+            store: containerd
           - mode: standalone
             engine: 29
             channel: stable
+            store: graphdriver
+          - mode: standalone
+            engine: 29
+            channel: stable
+            store: containerd
 
           # old stable (latest major - 1)
           - mode: plugin
             engine: 28
             channel: oldstable
+            store: graphdriver
           - mode: standalone
             engine: 28
             channel: oldstable
+            store: graphdriver
     steps:
       - name: Prepare
         run: |
           mode=${{ matrix.mode }}
           engine=${{ matrix.engine }}
-          echo "MODE_ENGINE_PAIR=${mode}-${engine}" >> $GITHUB_ENV
+          store=${{ matrix.store }}
+          echo "MODE_ENGINE_PAIR=${mode}-${engine}-${store}" >> $GITHUB_ENV
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Docker ${{ matrix.engine }}
         run: |
@@ -190,8 +221,22 @@ jobs:
       - name: Check Docker Version
         run: docker --version
 
+      - name: Enable containerd image store
+        if: ${{ matrix.store == 'containerd' }}
+        run: |
+          sudo mkdir -p /etc/docker
+          if [ -s /etc/docker/daemon.json ]; then
+            jq -s '.[0] * .[1]' /etc/docker/daemon.json <(echo '{"features": {"containerd-snapshotter": true}}') \
+              | sudo tee /etc/docker/daemon.json.new > /dev/null
+            sudo mv /etc/docker/daemon.json.new /etc/docker/daemon.json
+          else
+            echo '{"features": {"containerd-snapshotter": true}}' | sudo tee /etc/docker/daemon.json > /dev/null
+          fi
+          sudo systemctl restart docker.service
+          docker info -f '{{json .DriverStatus}}' | grep -q io.containerd.snapshotter.v1
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Set up Docker Model
         run: |
@@ -199,7 +244,7 @@ jobs:
           docker model version
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '.go-version'
           check-latest: true
@@ -209,7 +254,7 @@ jobs:
         run: make example-provider
 
       - name: Build
-        uses: docker/bake-action@v6
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         with:
           source: .
           targets: binary-with-coverage
@@ -222,7 +267,7 @@ jobs:
 
       - name: Setup tmate session
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug_enabled }}
-        uses: mxschmitt/action-tmate@8b4e4ac71822ed7e0ad5fb3d1c33483e9e8fb270 # v3.11
+        uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113 # v3.24
         with:
           limit-access-to-actor: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -236,7 +281,7 @@ jobs:
 
       - name: Gather coverage data
         if: ${{ matrix.mode == 'plugin' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-data-e2e-${{ env.MODE_ENGINE_PAIR }}
           path: bin/coverage/e2e/
@@ -250,10 +295,11 @@ jobs:
           make e2e-compose-standalone
 
       - name: e2e Test Summary
-        uses: test-summary/action@v2
+        uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
         with:
           paths: /tmp/report/report.xml       
         if: always()
+
   coverage:
     runs-on: ubuntu-latest
     needs:
@@ -262,20 +308,20 @@ jobs:
     steps:
       # codecov won't process the report without the source code available
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '.go-version'
           check-latest: true
       - name: Download unit test coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: coverage-data-unit
           path: coverage/unit
           merge-multiple: true
       - name: Download E2E test coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: coverage-data-e2e-*
           path: coverage/e2e
@@ -284,47 +330,36 @@ jobs:
         run: |
           go tool covdata textfmt -i=./coverage/unit,./coverage/e2e -o ./coverage.txt
       - name: Store coverage report in GitHub Actions
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: go-covdata-txt
           path: ./coverage.txt
           if-no-files-found: error
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage.txt
 
   release:
+    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
-      contents: write # to create a release (ncipollo/release-action)
-
+      contents: write # to create a release (softprops/action-gh-release)
     runs-on: ubuntu-latest
     needs:
-      - binary
+      - binary-finalize
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       -
         name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: compose-*
           path: ./bin/release
-          merge-multiple: true
+          name: release
       -
-        name: Create checksums
-        working-directory: ./bin/release
-        run: |
-          find . -type f -print0 | sort -z | xargs -r0 shasum -a 256 -b | sed 's# \*\./# *#' > $RUNNER_TEMP/checksums.txt
-          shasum -a 256 -U -c $RUNNER_TEMP/checksums.txt
-          mv $RUNNER_TEMP/checksums.txt .
-          cat checksums.txt | while read sum file; do
-            if [[ "${file#\*}" == docker-compose-* && "${file#\*}" != *.provenance.json && "${file#\*}" != *.sbom.json ]]; then
-              echo "$sum $file" > ${file#\*}.sha256
-            fi
-          done
-      -
+        # inspect what was actually downloaded from the artifact store —
+        # this is what gets attached to the release
         name: List artifacts
         run: |
           tree -nh ./bin/release
@@ -334,10 +369,12 @@ jobs:
           find bin/release -type f -exec file -e ascii -- {} +
       -
         name: GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: ncipollo/release-action@58ae73b360456532aafd58ee170c045abbeaee37 # v1.10.0
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
-          artifacts: ./bin/release/*
-          generateReleaseNotes: true
+          files: ./bin/release/*
+          generate_release_notes: true
           draft: true
+          # never replace assets already uploaded to an existing release
+          # (softprops updates an existing release for the tag instead of failing)
+          overwrite_files: false
           token: ${{ secrets.GITHUB_TOKEN }}

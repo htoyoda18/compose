@@ -15,9 +15,9 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-ARG GO_VERSION=1.24.11
+ARG GO_VERSION=1.26.6
 ARG XX_VERSION=1.9.0
-ARG GOLANGCI_LINT_VERSION=v2.6.2
+ARG GOLANGCI_LINT_VERSION=v2.11.3
 ARG ADDLICENSE_VERSION=v1.0.0
 
 ARG BUILD_TAGS="e2e"
@@ -33,7 +33,7 @@ FROM crazymax/osxcross:15.5-alpine AS osxcross
 FROM golangci/golangci-lint:${GOLANGCI_LINT_VERSION}-alpine AS golangci-lint
 FROM ghcr.io/google/addlicense:${ADDLICENSE_VERSION} AS addlicense
 
-FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION}-alpine3.22 AS base
+FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION}-alpine3.23 AS base
 COPY --from=xx / /
 RUN apk add --no-cache \
       clang \
@@ -74,16 +74,36 @@ RUN --mount=type=bind,target=.,rw <<EOT
   fi
 EOT
 
+FROM build-base AS mocks-generate
+RUN --mount=type=bind,target=.,rw \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    make mocks && mkdir /out && cp pkg/mocks/*.go /out
+
+FROM mocks-generate AS mocks-validate
+RUN --mount=type=bind,target=.,rw <<EOT
+  set -e
+  git add -A
+  cp -f /out/* pkg/mocks/
+  diff=$(git status --porcelain -- pkg/mocks)
+  if [ -n "$diff" ]; then
+    echo >&2 'ERROR: Generated mocks differ. Please regenerate them with "make mocks"'
+    echo "$diff"
+    exit 1
+  fi
+EOT
+
 FROM build-base AS build
 ARG BUILD_TAGS
 ARG BUILD_FLAGS
 ARG TARGETPLATFORM
+ARG MACOSX_VERSION_MIN=11.0
 RUN --mount=type=bind,target=. \
     --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=bind,from=osxcross,src=/osxsdk,target=/xx-sdk \
     xx-go --wrap && \
-    if [ "$(xx-info os)" == "darwin" ]; then export CGO_ENABLED=1; fi && \
+    if [ "$(xx-info os)" == "darwin" ]; then export CGO_ENABLED=1; export BUILD_TAGS=fsnotify,$BUILD_TAGS; fi && \
     make build GO_BUILDTAGS="$BUILD_TAGS" DESTDIR=/out && \
     xx-verify --static /out/docker-compose
 
@@ -119,7 +139,7 @@ FROM base AS license-set
 ARG LICENSE_FILES
 RUN --mount=type=bind,target=.,rw \
     --mount=from=addlicense,source=/app/addlicense,target=/usr/bin/addlicense \
-    find . -regex "${LICENSE_FILES}" | xargs addlicense -c 'Docker Compose CLI' -l apache && \
+    find . -regex "${LICENSE_FILES}" | xargs addlicense -c 'Docker Compose CLI' -l apache -ignore validate -ignore testdata -ignore '**/testdata/**' -ignore resolvepath && \
     mkdir /out && \
     find . -regex "${LICENSE_FILES}" | cpio -pdm /out
 
@@ -130,7 +150,7 @@ FROM base AS license-validate
 ARG LICENSE_FILES
 RUN --mount=type=bind,target=. \
     --mount=from=addlicense,source=/app/addlicense,target=/usr/bin/addlicense \
-    find . -regex "${LICENSE_FILES}" | xargs addlicense -check -c 'Docker Compose CLI' -l apache -ignore validate -ignore testdata -ignore resolvepath -v
+    find . -regex "${LICENSE_FILES}" | xargs addlicense -check -c 'Docker Compose CLI' -l apache -ignore validate -ignore testdata -ignore '**/testdata/**' -ignore resolvepath -v
 
 FROM base AS docsgen
 WORKDIR /src
@@ -195,3 +215,16 @@ RUN --mount=from=binary \
 
 FROM scratch AS release
 COPY --from=releaser /out/ /
+
+FROM --platform=$BUILDPLATFORM alpine AS module-releaser
+WORKDIR /work
+ARG TARGETOS
+RUN --mount=from=binary \
+    mkdir -p /cli-plugins/compose/$TARGETOS && \
+    cp docker-compose* "/cli-plugins/compose/$TARGETOS/docker-compose$(ls docker-compose* | sed -e 's/^docker-compose//')"
+
+FROM scratch AS module
+ARG TARGETOS
+COPY --from=module-releaser /cli-plugins/compose/$TARGETOS /cli-plugins/compose/$TARGETOS
+COPY ./desktop-module/module-metadata.json /
+COPY LICENSE /

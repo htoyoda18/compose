@@ -53,7 +53,7 @@ group "default" {
 }
 
 group "validate" {
-  targets = ["lint", "vendor-validate", "license-validate"]
+  targets = ["lint", "vendor-validate", "license-validate", "mocks-validate"]
 }
 
 target "lint" {
@@ -75,6 +75,12 @@ target "license-update" {
 target "vendor-validate" {
   inherits = ["_common"]
   target = "vendor-validate"
+  output = ["type=cacheonly"]
+}
+
+target "mocks-validate" {
+  inherits = ["_common"]
+  target = "mocks-validate"
   output = ["type=cacheonly"]
 }
 
@@ -145,4 +151,18 @@ target "docs-update" {
 target "image-cross" {
   inherits = ["meta-helper", "binary-cross"]
   output = ["type=image"]
+}
+
+target "image-module-cross" {
+  inherits = ["meta-helper", "binary-cross"]
+  target = "module"
+  output = ["type=image"]
+  platforms = [
+    "darwin/amd64",
+    "darwin/arm64",
+    "linux/amd64",
+    "linux/arm64",
+    "windows/amd64",
+    "windows/arm64",
+  ]
 }
