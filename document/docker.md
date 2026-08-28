@@ -7,6 +7,15 @@ Docker および Docker Compose の一般的な概念に関する学習ノート
 - OCI (Open Container Initiative)
   - コンテナ技術の標準仕様
   - この形式で作れば、どのコンテナ環境でも動く
+- OCI Image Spec 1.1 と 1.0 の違い
+  - 1.1 でマニフェストに `artifactType` フィールドが追加され、コンテナイメージ以外の
+    任意アーティファクト（Compose定義ファイル一式など）を、実体のないconfigの代わりに
+    `artifactType` で明示的に表現できるようになった
+  - 1.0（＝古いレジストリ/Distribution仕様）は `artifactType` を認識しない。代わりに
+    config media typeを見て種別を判別する慣習で後方互換を取る
+  - docker/composeの`publish`では、まず1.1形式でpushを試み、レジストリが理解できず
+    4xx（authエラー以外）を返した場合のみ1.0形式にフォールバックする、という設計になっている
+    （`internal/oci/push.go`）
 
 ## docker compose コマンド
 
@@ -61,6 +70,47 @@ Docker および Docker Compose の一般的な概念に関する学習ノート
 - Docker Buildx
   - Docker の次世代ビルド機能を CLI から使いやすくした拡張
   - 複数アーキテクチャ向けのマルチプラットフォームビルドを 1 コマンドで実行
+- マルチプラットフォームビルドとplatform解決（docker/compose内部）
+  - `build.platforms`（サービスがビルドをサポートするプラットフォーム一覧）と
+    `service.platform`（実行時に使うプラットフォーム）は別概念
+  - `docker compose build` は複数プラットフォームでのビルドを許容するが、
+    `up`/`create`/`run`/`watch`/`config` は単一プラットフォームでの実行が前提
+    （`buildForSinglePlatform`フラグで制御）
+  - `service.platform`が未指定かつ`build.platforms`が複数ある場合、最終的に
+    「ビルダーに選択を委ねる」ためリストを空にする分岐があるが、ビルダーが実際に
+    選ぶプラットフォームが宣言済みリストに含まれているかは検証されない、という
+    既知の検証漏れがある（`cmd/compose/options.go`のTODO、未対応）
+
+## OpenTelemetry (OTel)
+
+- OTel とは
+  - アプリケーションの分散トレーシング・メトリクス・ログを計測するためのベンダー中立な
+    標準規格＋SDK群。特定の監視ベンダー（Datadog, Honeycomb等）にロックインされずに
+    計装できるのが利点
+- 基本概念
+  - **Trace**: 1つのリクエスト/コマンド実行全体を表す一連の処理のまとまり
+  - **Span**: Trace を構成する個々の作業単位（開始・終了時刻、属性、ステータスを持つ）。
+    親子関係を持ちツリー状に連なる
+  - **Context propagation**: 呼び出しを跨いでTrace/Spanの文脈情報を伝搬する仕組み
+    （HTTPヘッダ等に埋め込む）
+  - **Exporter**: 収集したTrace/Spanをバックエンド（Collectorやベンダー）に送信する部品
+  - **OTLP (OpenTelemetry Protocol)**: SpanやMetricsをExporterからCollector/バックエンドへ
+    送る際の標準プロトコル（gRPC/HTTP）
+  - SDKとAPIの分離: アプリコードは薄い"API"に対して計装し、実際の収集・エクスポート方式は
+    "SDK"側の設定で差し替えられる、という設計思想
+- docker/composeでの実装（`internal/tracing`, `cmd/cmdtrace`）
+  - `cmd/cmdtrace/cmd_span.go`の`Setup`が各CLIコマンド実行のたびに呼ばれ、コマンド名を
+    スパン名にしたルートスパンを1つ作る（`otel.Tracer("").Start(...)`）
+  - `internal/tracing.InitTracing`が実際のトレーサー・エクスポータを初期化。
+    設定元は2種類:
+    - 標準の`OTEL_*`環境変数（`traceClientFromEnv`）
+    - Docker contextのメタデータ（`traceClientFromDockerContext`）による自動検出
+  - コマンド終了時（成功/失敗どちらでも）に`wrapRunE`がスパンへ結果（成功/エラー/exit code）を
+    記録し、`tracingShutdown`でスパンをflushしてエクスポータを終了する
+  - デフォルトでは、OTel SDK内部のエラー（`otel.ErrorHandler`）やshutdown時のエラーは
+    CLIの通常出力を汚さないよう完全に握りつぶされる設計。デバッグ目的で見たい場合は
+    `COMPOSE_OTEL_DEBUG=1`を設定すると、これらのエラーがstderrに出力されるようになる
+    （自分たちで実装したTODO対応。[PR #14152](https://github.com/docker/compose/pull/14152)）
 
 ## コンテナ基盤技術
 
