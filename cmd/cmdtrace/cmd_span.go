@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -62,7 +63,7 @@ func Setup(cmd *cobra.Command, dockerCli command.Cli, args []string) error {
 	)
 
 	cmd.SetContext(ctx)
-	wrapRunE(cmd, cmdSpan, tracingShutdown)
+	wrapRunE(cmd, cmdSpan, tracingShutdown, dockerCli.Err())
 	return nil
 }
 
@@ -72,7 +73,7 @@ func Setup(cmd *cobra.Command, dockerCli command.Cli, args []string) error {
 //
 // Unfortunately, PersistentPostRun(E) can't be used for this purpose because it
 // only runs if RunE does _not_ return an error, but this should run unconditionally.
-func wrapRunE(c *cobra.Command, cmdSpan trace.Span, tracingShutdown tracing.ShutdownFunc) {
+func wrapRunE(c *cobra.Command, cmdSpan trace.Span, tracingShutdown tracing.ShutdownFunc, errOut io.Writer) {
 	origRunE := c.RunE
 	if origRunE == nil {
 		origRun := c.Run
@@ -110,9 +111,9 @@ func wrapRunE(c *cobra.Command, cmdSpan trace.Span, tracingShutdown tracing.Shut
 			// been canceled already
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
-			// TODO(milas): add an env var to enable logging from the
-			// OTel components for debugging purposes
-			_ = tracingShutdown(ctx)
+			if err := tracingShutdown(ctx); err != nil && tracing.DebugEnabled() {
+				fmt.Fprintln(errOut, "otel: shutdown:", err)
+			}
 		}
 		return cmdErr
 	}

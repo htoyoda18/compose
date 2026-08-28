@@ -17,13 +17,31 @@
 package tracing
 
 import (
+	"fmt"
+	"os"
+	"strconv"
+
 	"go.opentelemetry.io/otel"
 )
 
-// skipErrors is a no-op otel.ErrorHandler.
-type skipErrors struct{}
+// DebugEnabled reports whether OTel SDK/exporter internals should print
+// their diagnostics, controlled by the COMPOSE_OTEL_DEBUG environment
+// variable. It defaults to false so tracing plumbing never leaks into
+// ordinary CLI output.
+func DebugEnabled() bool {
+	enabled, _ := strconv.ParseBool(os.Getenv("COMPOSE_OTEL_DEBUG"))
+	return enabled
+}
 
-// Handle does nothing, ignoring any errors passed to it.
-func (skipErrors) Handle(_ error) {}
+// errorHandler is the otel.ErrorHandler installed for the CLI: it discards
+// errors unless DebugEnabled reports true, in which case it prints them to
+// stderr.
+type errorHandler struct{}
 
-var _ otel.ErrorHandler = skipErrors{}
+func (errorHandler) Handle(err error) {
+	if DebugEnabled() {
+		fmt.Fprintln(os.Stderr, "otel:", err)
+	}
+}
+
+var _ otel.ErrorHandler = errorHandler{}

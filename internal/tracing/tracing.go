@@ -40,8 +40,8 @@ import (
 
 func init() {
 	detect.ServiceName = "compose"
-	// do not log tracing errors to stdio
-	otel.SetErrorHandler(skipErrors{})
+	// do not log tracing errors to stdio, unless COMPOSE_OTEL_DEBUG is set
+	otel.SetErrorHandler(errorHandler{})
 }
 
 // OTLPConfig contains the necessary values to initialize an OTLP client
