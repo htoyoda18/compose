@@ -14,13 +14,13 @@ Docker Compose v2 は、Docker 上でマルチコンテナアプリケーショ�
 
 - .github
   - GitHub 設定
-- cmd
+- [cmd](../cmd/note.md)
   - エントリーポイント
 - docs
   - ドキュメント
-- internal
+- [internal](../internal/note.md)
   - 内部パッケージ
-- pkg
+- [pkg](../pkg/note.md)
   - 公開パッケージ
 - .dockerignore
   - Docker ビルド時に無視するファイル

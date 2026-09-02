@@ -1,4 +1,4 @@
-- api
+- [api](api/note.md)
   - Docker Compose API の公開インターフェース
 - bridge
   - docker-compose v1 → v2 変換
@@ -10,7 +10,7 @@
   - End-to-Endテスト
 - mocks
   - テスト用モック
-- remote
+- [remote](remote/note.md)
   - リモート実行機能
 - utils
   - ユーティリティ関数集
