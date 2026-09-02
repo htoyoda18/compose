@@ -1,0 +1,20 @@
+- compose におけるトレースとは？
+  - `cmd/cmdtrace` が担う機能で、コマンド実行のたびにルートスパンを作り、実行全体を OpenTelemetry のトレースとして記録する
+  - `PersistentPreRunE` から呼ばれ、Docker コンテキストのメタデータや `OTEL_` 環境変数を元に tracer を初期化する
+  - コマンド終了時にスパンを終了・エクスポートし、外部のオブザーバビリティ基盤で CLI の実行を可視化できるようにする
+- cobra について
+  - Go の代表的な CLI フレームワークで、`docker compose` のサブコマンド群 (`up`, `down`, `build` 等) はすべて `cobra.Command` として定義される
+  - `compose.go` の `RootCommand` がルートコマンドを構築し、`AddCommand` で各サブコマンドをツリー状に登録する
+  - フラグ解析・ヘルプ生成・シェル補完・`PersistentPreRunE` などのライフサイクルフックを提供する
+- OpenTelemetry について
+  - ログ・メトリクス・トレースを統一的に扱うためのオブザーバビリティの標準規格 / SDK
+  - compose では分散トレーシングに利用しており、`internal/tracing` が tracer の初期化と OTLP exporter（gRPC/HTTP）への送出を担う
+  - `COMPOSE_OTEL_DEBUG` 環境変数で OTel 自体の内部動作（エクスポート失敗など）をデバッグ出力できる
+- Docker コンテキストについて
+  - 接続先の Docker エンジン（ローカル/リモート、TLS 設定など）をひとまとめにした設定情報
+  - `docker context use` で切り替え、CLI はこの情報をもとに Docker Engine API へ接続する
+  - compose のトレース初期化でも、コンテキストのメタデータから OTel の送出先エンドポイントを自動検出する
+- スタンドアロン版 docker-compose と CLI プラグイン版 docker compose
+  - スタンドアロン版は単独の実行ファイル `docker-compose` として動作し、独自の引数形式（`--tls` などのグローバルフラグ）を持つ
+  - プラグイン版は `docker` 本体からサブコマンド `compose` として呼び出される、現在推奨されている形態
+  - `cmd/main.go` の `compatibility.Convert` がスタンドアロン形式の引数をプラグイン形式に変換し、内部的には同じ `RootCommand` で処理される
