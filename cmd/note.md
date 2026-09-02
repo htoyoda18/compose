@@ -1,14 +1,28 @@
 - cmdtrace
   - コマンド実行のトレース機能
+  - cobra コマンドの `PersistentPreRunE` から呼ばれ、Docker コンテキストや OTEL_ 環境変数を元に tracer を初期化し、コマンド全体を覆うルートスパンを生成する
+  - スパンの終了・エクスポートまで面倒を見て、CLI 全体の実行を OpenTelemetry で可視化する
 - compatibility
   - 旧バージョンとの互換性維持
+  - スタンドアロン版 `docker-compose` の引数列を CLI プラグイン版 `docker compose` の引数列に変換する (`Convert`)
+  - `--tls` 系のグローバルフラグや補完コマンドを判別し、プラグイン呼び出しの形式に組み替える
 - [compose](compose/note.md)
   - Docker Compose の全コマンド実装
+  - `up`/`down`/`build`/`run` など 45 以上のサブコマンドと、それらが共有するオプション定義を格納する
+  - `compose.go` の `RootCommand` が cobra のルートコマンドを構築し、各サブコマンドを登録するエントリーポイントになっている
 - display
   - 表示モード管理
+  - TTY/Plain/JSON/Quiet といった進捗表示モード (`mode.go`) と、各モードに対応するレンダラー実装 (`tty.go` など) を持つ
+  - コマンド実行中に発生するイベントをどう画面に描画するかを一元的に管理する
 - formatter
   - 出力フォーマット処理
+  - `ps`/`images` などの一覧系コマンドの出力を table/JSON/pretty などの形式に変換する (`formatter.go`)
+  - コンテナ状態の色付け表示 (`container.go`) やログのプレフィックス整形 (`logs.go`) も担う
 - prompt
   - ユーザー確認プロンプト
+  - 破壊的な操作の前に y/n 確認を取る `UI` インターフェースを定義する (`prompt.go`)
+  - 対話端末では `survey` を使った確認、非対話環境ではパイプ経由の実装に自動で切り替わる
 - [main.go](main.go.md)
   - プログラムのエントリーポイント
+  - スタンドアロン起動時は引数を `compatibility.Convert` でプラグイン形式に変換したうえで、`pluginMain` から CLI プラグインとして起動する
+  - `cmdtrace.Setup` によるトレース初期化やルートコマンドの構築もここで行う
