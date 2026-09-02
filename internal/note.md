@@ -1,22 +1,46 @@
 - desktop
   - Docker Desktop 統合
     - Docker Desktop アプリケーションとの通信・連携機能
+  - `client.go` が Desktop 側のインメモリソケット(AF_UNIX/named pipe)に接続する `Client` を提供し、疎通確認 (`Ping`) や機能フラグ取得 (`FeatureFlags`) を行う
+  - `proxy.go` の `Endpoint` は Docker Engine の情報から Desktop 統合用エンドポイントを解決する
 - experimental
   - 実験的機能の管理
+  - `COMPOSE_EXPERIMENTAL` 環境変数と Docker Desktop から取得した機能フラグを合成し、実験的機能ごとの有効/無効を表す `State` を提供する
+  - 環境変数でグローバルに opt-out した場合や Desktop 非接続時は Desktop 側の状態取得をスキップする
 - locker
   - ロック機構
     - 複数の Compose プロセスが同時実行されないように制御
+  - `pidfile.go` がプロジェクトごとの PID ファイルを実行時ディレクトリ配下に作成し、多重起動を検出する
+  - `runtime.go`/`runtime_*.go` が OS ごとに異なる実行時ディレクトリ(`XDG_RUNTIME_DIR` 等)の解決方法を吸収する
 - memnet
   - メモリ内ネットワーク
+  - `conn.go` の `DialEndpoint` が `unix://`/`npipe://` 形式のエンドポイント文字列を解釈し、対応するソケットへ接続する
+  - OS ごとの実装 (`conn_unix.go`/`conn_windows.go`) が Unix ドメインソケットと Windows 名前付きパイプの差異を吸収する
 - oci
-  - Open Container Initiative関連
+  - Open Container Initiative 関連
+  - `resolver.go` が docker/cli の認証情報を使ってレジストリ用の `Resolver` を構築し、マニフェスト/blob の取得・コピー・push を行う
+  - `push.go` は compose.yaml や .env ファイルを OCI アーティファクトの layer として記述し、マニフェストを生成して push する（`docker compose publish` 等で利用）
 - paths
   - パス処理ユーティリティ
+  - `IsChild` が大小文字の違いやシンボリックリンクも考慮しつつ、あるパスが別のパスの子孫かどうかを判定する
+  - `EncompassingPaths` が複数パスの集合から、それらをすべて包含する最小限のパス集合を求める（watch の監視対象パスの集約などで利用）
+- pidfile
+  - PID ファイルの読み書き
+  - `pidfile.go` の `Read`/`Write` が指定パスの PID ファイルを読み書きし、既存ファイルが実行中プロセスの PID を指していればエラーを返す
+  - `github.com/moby/moby/v2/pkg/pidfile` の暫定コピーで、`internal/locker` から OS 別の生存確認 (`alive`) 実装 (`pidfile_unix.go`/`pidfile_windows.go`) とあわせて多重起動防止に利用される
 - registry
   - コンテナレジストリ関連
+  - Docker Hub のデフォルトレジストリ名・ホスト名（`registry-1.docker.io` 等）を定数として定義する
+  - `GetAuthConfigKey` がイメージ参照からレジストリ名を認証情報のキー（`docker.io` かどうかで index server の URL に正規化）に変換する
 - sync
   - ファイル同期機能
+  - `shared.go` がホスト側の変更パスとコンテナ側のパスを対応付ける `PathMapping` と、それを反映する `Syncer` インターフェースを定義する（`watch` 機能の同期処理で利用）
+  - `tar.go` が変更されたファイル群を tar アーカイブとしてまとめ、コンテナへ転送する処理を担う
 - tracing
   - 分散トレーシング機能
+  - `tracing.go` の `InitTracing`/`InitProvider` が OTLP エクスポーター(gRPC)を構築し、コマンド実行全体を計装する tracer を初期化する
+  - `docker_context.go` がアクティブな Docker コンテキストのメタデータから OTLP の接続先設定を自動検出し、`mux.go` は複数エクスポーターへの同時送出をまとめる
 - variables.go
   - バージョン情報の管理
+  - ビルド時に `-ldflags` 経由で注入される CLI のバージョン文字列 `Version` を保持する（未注入時は `"dev"`）
+  - `main.go` のプラグインメタデータや `docker compose version` の出力に利用される
