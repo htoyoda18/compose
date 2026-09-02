@@ -32,6 +32,8 @@ Docker Compose v2 は、Docker 上でマルチコンテナアプリケーショ�
   - 使用する Go のバージョン
 - .golangci.yml
   - コード品質チェックツール
+- AGENTS.md
+  - AI コーディングエージェント用のドキュメント
 - BUILDING.md
   - ビルド方法の詳細説明
 - codecov.yml
