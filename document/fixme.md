@@ -12,8 +12,6 @@
   - バグではなく、クリーンアップの TODO。変化なし
 - pkg/compose/create.go:1383（旧1247）
   - DriverConfig がモデルにない。compose-spec側の制約で変化なし
-- pkg/e2e/build_test.go:176
-  - ブロッキング Issue(moby/buildkit#5558) は解消済み。再有効化を試せる状態、変化なし
 - .github/workflows/merge.yml:26（新規発見）
   - reusable workflowのinputsで`env`オブジェクトを直接参照できないGitHub Actionsの制約
   - job outputに経由させる回避策で対応済み。upstream側でも対応不可な外部プラットフォーム制約
@@ -27,3 +25,6 @@
   - **修正・マージ済み**: https://github.com/docker/compose/pull/14117
   - 調査の結果、単なる残骸コメントではなく、2025-01のリファクタ(ed10804e0)でDockerfile/compose.yaml除外matcherが代替なしに削除された実害のあるリグレッションだった
   - 初回PRの後、レビュー対応でフォローアップ修正も追加された(コミット8ddbdc41a: `cli.DefaultFileNames`/`DefaultOverrideFileNames`やカスタムDockerfile名にも対応する、より正確なパターンに改善)
+- ~~pkg/e2e/build_test.go:176（ブロッキング Issue moby/buildkit#5558 解消済みで再有効化可能）~~
+  - **修正・マージ済み**: https://github.com/docker/compose/pull/14120
+  - `TestBuildSSH`内で無効化されていた「間違ったsshキーID」サブテストを再有効化。issueは2024年12月に解消済みで、現行vendor済みbuildkit(v0.26.3)には問題なし

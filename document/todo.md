@@ -1,7 +1,7 @@
 ## TODO コメント調査状況
 
-- `cmd/cmdtrace/cmd_span.go:113`
-  - OTel コンポーネントのデバッグログを有効にする環境変数が無い、という機能追加系 TODO。バグではなく実害は無い。実装は `internal/tracing` 側にログ差し込み処理を追加する程度で難易度は低い。
+- `cmd/cmdtrace/cmd_span.go:113` ✅ 対応済み（[PR #14152](https://github.com/docker/compose/pull/14152)、Merged）
+  - OTel コンポーネントのデバッグログを有効にする環境変数が無い、という機能追加系 TODO。バグではなく実害は無い。当初は専用の`COMPOSE_OTEL_DEBUG`環境変数を実装したが、レビュー指摘を受けて既存の`--debug`/`-D`（logrus経由）に統合。あわせて`docker/cli`の`plugin.Run()`が自パッケージの`otel.ErrorHandler`初期化を上書きしていた問題も解消。
 - `cmd/compose/options.go:95`
   - `applyPlatforms`（`buildForSinglePlatform=true`）で呼ばれる `create`/`up`/`run`/`config`/`watch` が対象。`DOCKER_DEFAULT_PLATFORM`未設定・`service.platform`未指定・`build.platforms`に 2 つ以上指定、の 3 条件が揃うと `Build.Platforms` が `nil` にクリアされ、ビルダーが選ぶプラットフォームが宣言済みリストに含まれているかの検証が行われないまま素通りする実バグ。`build_classic.go:234`と`build_bake.go:346`のガードは`len(Platforms)>1`しか見ておらず`nil`は防げないことを確認済み。根本修正にはビルダーが実際に選ぶプラットフォームの事前予測が必要で難易度は中〜高（ホストの GOOS/GOARCH や daemon 情報で代用するヒューリスティックが現実的な落とし所）。
 - `internal/oci/push.go:125` ✅ 対応済み（[PR #14146](https://github.com/docker/compose/pull/14146)、OPEN）

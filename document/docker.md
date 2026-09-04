@@ -108,9 +108,14 @@ Docker および Docker Compose の一般的な概念に関する学習ノート
   - コマンド終了時（成功/失敗どちらでも）に`wrapRunE`がスパンへ結果（成功/エラー/exit code）を
     記録し、`tracingShutdown`でスパンをflushしてエクスポータを終了する
   - デフォルトでは、OTel SDK内部のエラー（`otel.ErrorHandler`）やshutdown時のエラーは
-    CLIの通常出力を汚さないよう完全に握りつぶされる設計。デバッグ目的で見たい場合は
-    `COMPOSE_OTEL_DEBUG=1`を設定すると、これらのエラーがstderrに出力されるようになる
-    （自分たちで実装したTODO対応。[PR #14152](https://github.com/docker/compose/pull/14152)）
+    CLIの通常出力を汚さないよう完全に握りつぶされる設計だったが、デバッグ目的で見えないと
+    診断できない問題があった。`--debug`/`-D`を付けると、これらのエラーが
+    `logrus.WithError(err).Debug(...)`経由でstderrに出力されるようになる
+    （自分たちで実装したTODO対応。[PR #14152](https://github.com/docker/compose/pull/14152)。
+    当初は専用の`COMPOSE_OTEL_DEBUG`環境変数を追加する案だったが、レビューで既存の
+    `--debug`機構に寄せる方針に変更。あわせて`docker/cli`の`plugin.Run()`が起動時に
+    `otel.SetErrorHandler`を呼び直し、`internal/tracing`側の`init()`によるハンドラ登録を
+    無効化していた不具合も判明・解消した）
 
 ## コンテナ基盤技術
 
