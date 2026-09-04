@@ -1,7 +1,7 @@
 ## TODO コメント調査状況
 
 - `cmd/cmdtrace/cmd_span.go:113` ✅ 対応済み（[PR #14152](https://github.com/docker/compose/pull/14152)、Merged）
-  - OTel コンポーネントのデバッグログを有効にする環境変数が無い、という機能追加系 TODO。バグではなく実害は無い。当初は専用の`COMPOSE_OTEL_DEBUG`環境変数を実装したが、レビュー指摘を受けて既存の`--debug`/`-D`（logrus経由）に統合。あわせて`docker/cli`の`plugin.Run()`が自パッケージの`otel.ErrorHandler`初期化を上書きしていた問題も解消。
+  - OTel コンポーネントのデバッグログを有効にする環境変数が無い、という機能追加系 TODO。バグではなく実害は無い。当初は専用の`COMPOSE_OTEL_DEBUG`環境変数を実装したが、レビュー指摘を受けて既存の`--debug`/`-D`（logrus 経由）に統合。あわせて`docker/cli`の`plugin.Run()`が自パッケージの`otel.ErrorHandler`初期化を上書きしていた問題も解消。
 - `cmd/compose/options.go:95`
   - `applyPlatforms`（`buildForSinglePlatform=true`）で呼ばれる `create`/`up`/`run`/`config`/`watch` が対象。`DOCKER_DEFAULT_PLATFORM`未設定・`service.platform`未指定・`build.platforms`に 2 つ以上指定、の 3 条件が揃うと `Build.Platforms` が `nil` にクリアされ、ビルダーが選ぶプラットフォームが宣言済みリストに含まれているかの検証が行われないまま素通りする実バグ。`build_classic.go:234`と`build_bake.go:346`のガードは`len(Platforms)>1`しか見ておらず`nil`は防げないことを確認済み。根本修正にはビルダーが実際に選ぶプラットフォームの事前予測が必要で難易度は中〜高（ホストの GOOS/GOARCH や daemon 情報で代用するヒューリスティックが現実的な落とし所）。
 - `internal/oci/push.go:125` ✅ 対応済み（[PR #14146](https://github.com/docker/compose/pull/14146)、OPEN）
@@ -10,3 +10,55 @@
   - `thaJeztah`（docker/cli メンテナ）による設計上の疑問で、`docker/cli`の PR ディスカッションにリンクされている。Auth/IdentityToken/RegistryToken をレガシービルダー用 authconfig に含めるべきか未確定であり、upstream 側の結論待ち。このリポジトリ単独では判断・対応不可。
 - `pkg/compose/create.go:575`
   - `docker/cli`からコピペしたセキュリティオプションのパース処理で、共通化する方法を探したいという DRY 違反の指摘。現状動作に問題はないが保守負債。共有するには`docker/cli`側が該当ロジックを公開 API として切り出す必要があり、技術難易度よりもリポジトリを跨いだ調整コストが高い。
+- `pkg/compose/events.go:40`
+  - `docker compose events`が`container`タイプのイベントしか転送しない、という機能追加系 TODO。moby 側は`builder`/`config`/`daemon`/`image`/`network`/`node`/`plugin`/`secret`/`service`/`volume`など多数のイベントタイプを発行しており、`docker events`（プレーンな Docker CLI）は全タイプを表示するのに対し compose は非対応。
+  - **重要**: `Events()`は`projectFilter(projectName)`（label `com.docker.compose.project=<name>`）だけで daemon 側にフィルタをかけており、daemon はこのラベルフィルタを container/image/network/volume 全イベントタイプに適用する。かつ`pkg/compose/build.go:314`（image）・`pkg/compose/create.go:143,204`（network/volume）で compose 自身がこのラベルを付与しているため、**プロジェクトの image ビルド/pull や network/volume の作成・削除イベントは実際に daemon からストリーミングされてきているが、`event.Type != "container"`でクライアント側が無条件に捨てている**。フィルタを緩めれば届く話ではなく、既に届いているデータを活かせていない実装になっている。
+  - 単純に`continue`を外せない理由（影響範囲）: (1) `api.Event`構造体(`pkg/api/api.go:505`)が`Service`/`Container`という container 専用のフィールド名で固定で`Type`フィールドが無い、(2) `Event.String()`(`pkg/api/api.go:546`)が`"container"`を文字列として決め打ちでフォーマット、(3) `cmd/compose/events.go`の`--json`出力も`"type": "container"`をハードコード、(4) `docs/reference/compose_events.md`（生成元`docker_compose_events.yaml`）自体が「Stream container events for every container in the project.」と container 限定の説明になっている。呼び出し元は`cmd/compose/events.go`の 1 箇所のみで影響範囲はコンパクトだが、`pkg/compose`側に events 専用の単体テストが無く（e2e も`TestEventsUnknownService`のみ）、型を広げる場合は新規テストをゼロから書く必要がある。
+  - 難易度は中。コアの変更（フィルタを外し`Type`を伝播）自体は小さいが、container 固有の語彙のままでは他タイプを自然に表現できず`api.Event`の構造再設計（公開 API の破壊的変更）が避けられない点、および`Event.String()`/JSON 出力/ドキュメントの 4 箇所を同時に追従させる必要がある点が難易度を押し上げている。
+- `pkg/compose/ps.go:100`
+  - `thaJeztah`（docker/cli メンテナ）による`PortPublisher.URL`（現状`string`）を`netip.Addr`にすべきでは、という型設計上の指摘。
+  - `pkg/compose/build_classic.go:335`と同じ人物によるコメントで、バグではなく純粋なリファクタ提案。
+  - `api.PortPublisher`は公開 API の型のため変更は破壊的変更になり、対応するかは要検討・低優先度。
+  - まずは issue 化して合意を得るのが良さそうかな
+- `pkg/compose/push.go:169`
+  - push 完了検知が、レジストリ/ビルドデーモンが返す JSON progress ストリームの`status`文字列を`"pushed"`/`"layer already exists"`と直接比較する実装になっており、脆いという設計上の指摘（2023 年 11 月の cb01186c2 で追加）。
+  - 実際に誤検知した既知バグは無いが、将来デーモン/レジストリ側が文言や大文字小文字以外の形で状態表現を変えると壊れうる。
+  - 根本修正にはデーモン API 側が JSON ストリームに構造化された完了シグナルを持つ必要があり、compose 単独では対応不可（moby 側の変更待ち）。
+- `pkg/compose/watch_test.go:182`
+  - テスト自体の TODO で、`/rebuild`イベント発火後の検証が「一定時間(100ms)内に sync が発生しないこと」という消極的なチェックのみで、rebuild 処理自体が実行されたことを積極的に確認できていない、というテストカバレッジの弱さの指摘。
+  - プロダクションコードのバグではない。対応するには`fakeSyncer`のように rebuild 経路にもフック（呼び出し記録用チャネル等）を追加する必要があり、難易度は低〜中。
+- `pkg/e2e/cancel_test.go:77`
+  - `milas`（docker/compose メンテナ）による、SIGINT/SIGTERM 時に Compose が常に終了コード 130 を返す実装（`cmd/compose/compose.go:121-124`、`api.IsErrCanceled`/`context.Canceled`を`dockercli.StatusError{StatusCode: 130}`に変換）が「compose-cli ラッパー時代の古いハック」であり本来あるべきではない、という設計上の指摘。
+  - 130 自体は SIGINT 終了の POSIX 慣習的な値であり実害があるわけではないが、意図的なハードコードである点をメンテナ自身が疑問視している。
+  - 変更するとスクリプト等が依存している終了コードの契約を破壊しうる破壊的変更になるため、対応するとしても要議論・低優先度。
+- `pkg/e2e/pause_test.go:43`
+  - `docker pause`（プレーン Docker CLI）は対象コンテナが存在しない/実行中でない場合にエラーを返すが、`docker compose pause <service>`はその service にコンテナが 1 つも無くてもエラーにならず no-op で成功する、という非一貫性の指摘。
+  - `pkg/compose/pause.go`の`pause()`は`getContainers()`で見つかったコンテナのみを`forEachContainerConcurrent`で処理する実装のため、0 件ならそもそも何もしないまま成功する。
+  - バグではなく意図的な設計判断に見える（複数 service を一括操作する際、たまたま 1 つが未起動なだけで全体を失敗させたくない、という理由が透ける）。対応するとすれば「docker と合わせてエラーにする」か「現状の no-op 許容を明文化する」かの方針次第で、コード変更自体の難易度は低いがユーザー影響のある挙動変更になるため要合意。
+- `pkg/e2e/start_stop_test.go:148`
+  - 既に停止済みの service に対して`docker compose stop`を再度実行すると、実際には何もしていないのに"Container ... Stopped"という完了メッセージを出力してしまう、という一貫性の指摘。
+  - 根本原因は2箇所の組み合わせ。(1) `pkg/compose/stop.go`の`stop()`は`getContainers(ctx, projectName, oneOffExclude, true)`と`all=true`で呼んでおり、意図的に停止済みコンテナも含めて全件取得している（＝2回目の`stop`でも対象コンテナが「見つからない」わけではない）。(2) 実際に停止処理を行う`pkg/compose/down.go:316`の`stopContainer()`がコンテナの現在の`State`を一切見ずに`ContainerStop`を呼び、エラーが無ければ無条件で`api.StatusStopped`イベントを発火する。
+  - Docker Engine API 側の`ContainerStop`は既に停止済みのコンテナに対してもエラーを返さず成功するため、結果的に「今 stop した」かのようなメッセージが出続ける。
+  - **影響範囲**: `stopContainer()`は`stop`コマンド（`stopContainers`経由）だけでなく、`down.go:104,113`の`removeContainers`→`stopAndRemoveContainer`経由で`docker compose down`（対象 service のコンテナ・orphan コンテナ双方）にも共有されている。
+  - つまりこの TODO は`stop`単体の見た目の問題ではなく、`down`実行時に「既に停止済みのコンテナ」に対しても常に"Stopping"/"Stopped"の進捗行が表示される、という同根の挙動を持つ。ただし`down`は最終的にコンテナを削除するため、経由的に"Stopped"が出てもユーザーの違和感は`stop`単体で連続実行した場合ほど大きくない。
+  - **難易度**: `container.Summary.State`（`ContainerState`型、`running`/`exited`/`created`/`paused`等）を見て、既に非稼働状態なら`stopContainer`内でイベント発火と API 呼び出し自体をスキップする、という変更自体は小さく難易度は低い。
+  - ただし`stopContainer`が`stop`と`down`の両方から共有されている関数のため、(a) スキップ条件を`stop`と`down`で同じにしてよいか（`down`側は"Removing"の前段としての"Stopping"表示に意味があるかもしれない）、(b) `paused`状態のコンテナは`ContainerStop`で正しく止められる（unpause+stop される）ため単純に「非 running 除外」ではなく「`exited`/`created`/`dead`など明確に停止済みの状態だけ除外」という条件の精査が必要、という設計面の検討が伴う。実害はメッセージの誤解のみで機能的なバグではないため優先度は低い。
+- `pkg/e2e/watch_test.go:78`
+  - `docker compose watch`をバックグラウンドで起動して起動完了を待つ、というテストコードが複数箇所に重複しているのでフレームワーク化したい、という純粋なテストリファクタ系 TODO。
+  - プロダクションコードにもテストの正しさにも影響しない。難易度は低いが優先度も低い。
+- `pkg/watch/watcher_naive.go:197` （調査済み・結論: 実質的にはリークではない）
+  - **影響範囲の訂正**: `watcher_naive.go`自体は`!fsnotify`ビルドタグで Linux/Windows 両方でコンパイルされるが、この TODO が属する「非 recursive」分岐（`loop()`内`if !d.isWatcherRecursive`）が実行されるのは実質 **Linux のみ**。`setRecursive()`は Windows では`ReadDirectoryChangesW`のネイティブ再帰フラグにより`true`を返し（`watcher_windows.go`）、非 Windows では常に`false`（`watcher_nonwin.go:27-30`）。macOS は`Dockerfile:106`で`BUILD_TAGS=fsnotify`が付与され`watcher_darwin.go`（kqueue/FSEvents）を使うため対象外。`pkg/watch/notify_test.go`の`isRecursiveWatcher()`ヘルパー（`darwin`/`windows`で`true`）もこれを裏付けている。
+  - **本題の検証**: vendor 済み`tilt-dev/fsnotify`の Linux 実装（`inotify.go`）を読むと、ディレクトリが削除されると (1) カーネルが inotify watch を自動的に破棄し（`inotify(7)`の標準仕様、`IN_IGNORED`が飛ぶ）、(2) ライブラリの`readEvents()`が`IN_DELETE_SELF`を検知した時点で自身の内部マップ（`w.watches`/`w.paths`）も同時に掃除している（`inotify.go:284-291`のコメントに明記）。つまり、削除されたパス自身が個別に`d.addWatch()`されていた場合（`walkAndAdd`で全サブディレクトリを個別 watch しているため通常そうなる）、`d.watcher.Remove()`を呼ばなくてもカーネル側・ライブラリ側の両方で自動的に後始末される。TODO が示唆する「呼んだほうがいい」という対応をしても、`Remove()`は既に消えた watch に対して`EINVAL`を返すだけ（`inotify.go:153-158`のコメントの通り、この`Remove()`の呼び出し元は元々この`EINVAL`を許容する設計）で、実質的に no-op になる。
+  - **既存テストによる裏付け**: `pkg/watch/notify_test.go:101`の`TestGitBranchSwitch`が、まさにこのシナリオ（多数のネストしたサブディレクトリを作成後、`os.RemoveAll`で一括削除するのを"consumeEventsInBackground"しながら実行し、エラーが出ないことをアサート）を検証しており、意図的にこの手のケースの安全性を担保するために追加されたテストと推測される。少なくとも「クラッシュ・エラー・watchが壊れる」という意味でのリークは既に検証済みで問題ない。
+  - **唯一残る実際のギャップ**: `naiveNotify.add()`が`d.numWatches`と package 変数`numberOfWatches`（`expvar.Int`、診断用メトリクス`watch.naive.numberOfWatches`）をインクリメントする一方、個別の watch がカーネルによって暗黙に破棄された場合にこれらをデクリメントする経路が無い（デクリメントは`Close()`で全体を一括リセットする時のみ）。そのため、監視対象ツリー内でディレクトリの作成・削除が頻発する長時間の`compose watch`セッションでは、この診断用カウンタが実際のアクティブ watch 数より過大にドリフトしうる。ただし`pkg/watch/notify_test.go:471`の`TestWatchCountInnerFile`は削除を伴わないケースしか検証しておらず、このドリフト自体は未検証。
+  - **難易度・優先度**: 実際に対応する価値があるのは「`numberOfWatches`のデクリメント漏れ」のみで、TODO の文言が示唆する「リーク対策として`Remove()`を呼ぶ」という対応自体は不要（無害だが無意味）。カウンタ修正は削除イベント検知時に該当パスがどれだけの watch を保持していたか突き合わせてデクリメントするだけなので難易度は低いが、影響が内部の`expvar`診断メトリクスに留まりユーザー体験には影響しないため優先度は低い。
+- `pkg/watch/watcher_naive.go:221`
+  - 同じく非 recursive ウォッチャーの`walkAndNotify`内の TODO。
+  - `filepath.WalkDir`はデフォルトでシンボリックリンクをたどらない（symlink 自体はリーフとして扱われ、リンク先ディレクトリの中身は再帰されない）ため、監視対象ツリーの中にシンボリックリンクで指されたディレクトリがあると、その中のファイル変更を検知できない。
+  - モノレポや npm/yarn workspace のようにシンボリックリンク構成を持つプロジェクトで`compose watch`の sync 漏れを引き起こしうる実害のあるギャップ。
+  - ただしシンボリックリンクを素朴にたどるとサイクル（無限ループ）のリスクがあり、コメントの絵文字（😭）が示す通り意図的に先送りにされている厄介な問題。
+  - 対応するには訪問済みパス/inode の記録によるサイクル検出とセットでの実装が必要で、難易度は中〜高。
+- `pkg/watch/watcher_windows.go:25`
+  - Windows 版ウォッチャー（`ReadDirectoryChangesW`ベース）の内部バッファサイズが固定（`pkg/watch/notify.go:89`の`defaultBufferSize = 65536`）で、変更量がバッファを超えるとイベント取りこぼしが起きうる、という設計上の理想（動的リサイズ）を述べた TODO。
+  - 既に`COMPOSE_WATCH_WINDOWS_BUFFER_SIZE`環境変数（`pkg/watch/notify.go:87-99`）で手動調整できるエスケープハッチが用意されているため、実害はユーザーが手動チューニングを強いられる利便性の問題にとどまる。
+  - 対応するには変更頻度やウォッチ対象ディレクトリ数に応じた動的リサイズロジックが必要で、TODO のコメント自身が実装の複雑さ（"messy"）を認めている通り難易度は中。
