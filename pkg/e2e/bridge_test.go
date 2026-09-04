@@ -1,3 +1,5 @@
+//go:build e2e
+
 /*
    Copyright 2020 Docker Compose CLI authors
 
@@ -26,7 +28,7 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-const bridgeImageVersion = "v0.0.3"
+const bridgeImageVersion = "v0.0.7"
 
 func TestConvertAndTransformList(t *testing.T) {
 	c := NewParallelCLI(t)
