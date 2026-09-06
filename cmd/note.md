@@ -1,8 +1,8 @@
-- cmdtrace
+- [cmdtrace](cmdtrace/note.md)
   - コマンド実行のトレース機能
   - cobra コマンドの `PersistentPreRunE` から呼ばれ、Docker コンテキストや OTEL_ 環境変数を元に tracer を初期化し、コマンド全体を覆うルートスパンを生成する
   - スパンの終了・エクスポートまで面倒を見て、CLI 全体の実行を OpenTelemetry で可視化する
-- compatibility
+- [compatibility](compatibility/note.md)
   - 旧バージョンとの互換性維持
   - スタンドアロン版 `docker-compose` の引数列を CLI プラグイン版 `docker compose` の引数列に変換する (`Convert`)
   - `--tls` 系のグローバルフラグや補完コマンドを判別し、プラグイン呼び出しの形式に組み替える
