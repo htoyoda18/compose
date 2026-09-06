@@ -1,0 +1,47 @@
+## Issue 調査状況
+
+- [#14163](https://github.com/docker/compose/issues/14163) Support Mounts and Secrets in Compose Provider Extensions
+  - Compose providerは環境変数でしかservicesに情報を注入できず、secret/mountのようなファイルベースの注入手段が無い、という機能要望。
+  - DB providerがパスワードをenv varではなくsecretファイルとして渡せるようにしたい、というのが動機（env varはprocess inspectionやログから漏れやすい）。
+  - **対応状況**: コメント0件でメンテナ未トリアージ。実装は`pkg/compose/plugins.go`（provider出力を`service.Environment`にしか書き込めない）にあり、着手すらされていない。
+  - **難易度**: 中〜高。provider実行バイナリの出力プロトコル（env var前提）自体の拡張、`secrets:`にprovider由来ソースを追加する compose-spec 側のスキーマ変更、`pkg/compose`側でのファイルマウント配線が必要で、compose 単体では閉じない。
+- [#14162](https://github.com/docker/compose/issues/14162) Allow overriding entrypoint for pre_start init containers
+  - `pre_start`のinit containerでイメージのENTRYPOINTを上書きできない、という機能要望。
+  - openssl等の汎用ユーティリティイメージのデフォルトentrypointが初期化コマンドに合わず、代わりにAlpineへ毎回パッケージインストールする回避策が遅い、という具体例。
+  - **対応状況**: メンテナ(ndeloof)が「compose-spec側の[PR #642](https://github.com/compose-spec/compose-spec/pull/642)（`pre_start`が`ContainerSpec`をフルサポートするようにする"introduce Jobs"）がマージされたら対応可能」とコメント済み。当該PRは現時点(2026-09-06)でもOPENで未マージ、docker/compose側での着手前の状態。
+  - **難易度**: docker/compose 側の実装自体は低い（`types.ServiceHook`に`Entrypoint`フィールドが増えれば`pkg/compose/pre_start.go:174`の`cfg`に1行足すだけ）。ただし上流の compose-spec 側スキーマ変更・compose-go への反映が前提のため、実質的なボトルネックは upstream 待ち。
+- [#14081](https://github.com/docker/compose/issues/14081) Epic: converge the start phase into the plan engine
+  - Composeに2つのライフサイクルエンジン（`create`専用のplanベース reconciler と、`start`/`stop`/`restart`が使う imperative な`InDependencyOrder`）が共存している状態を1つのplanエンジンに統合する大型epic。
+  - #14074のセクションCから派生。Lot0〜3の段階的PR分割が定義済み。
+  - **対応状況**: Lot0（基盤整備）は完了 — [#14104](https://github.com/docker/compose/pull/14104)/[#14105](https://github.com/docker/compose/pull/14105)/[#14106](https://github.com/docker/compose/pull/14106)/[#14124](https://github.com/docker/compose/pull/14124) すべてマージ済み。Lot1（planに start フェーズの語彙を追加）は[PR #14156](https://github.com/docker/compose/pull/14156)として進行中(OPEN)。Lot2（各コマンドの実移行）・Lot3（旧実装削除）は未着手。
+  - **難易度**: epic自体は高（クリティカルパス 6→7→9→12 が示す通り複数フェーズの大規模リファクタ）。ただし各PRは意図的に小さく分割・レビュー可能な設計になっており、個々のPR単位では中程度に抑えられている。
+- [#14074](https://github.com/docker/compose/issues/14074) Epic: make the codebase agent-legible
+  - コードのコメント/ドキュメント/エラーメッセージが実装と食い違っている箇所を洗い出し修正する大型epic（5並列の網羅的レビューが元）。
+  - `pkg/api`の契約不整合、ラベル体系の不統一、env var解決順序のばらつき等、多数の子タスクに分割済み。
+  - **対応状況**: セクションA（自己記述の誤り）・B前半・E前半・Gはほぼマージ済み（[#14129](https://github.com/docker/compose/pull/14129)〜[#14133](https://github.com/docker/compose/pull/14133),[#14135](https://github.com/docker/compose/pull/14135),[#14136](https://github.com/docker/compose/pull/14136),[#14102](https://github.com/docker/compose/pull/14102),[#14103](https://github.com/docker/compose/pull/14103),[#14077](https://github.com/docker/compose/pull/14077),[#14078](https://github.com/docker/compose/pull/14078),[#14142](https://github.com/docker/compose/pull/14142)）。セクションC（ライフサイクルエンジン統合）は#14081に切り出されて進行中。B後半・D・F・Gの残りは[#14134](https://github.com/docker/compose/pull/14134)/[#14149](https://github.com/docker/compose/pull/14149)/[#14150](https://github.com/docker/compose/pull/14150)/[#14151](https://github.com/docker/compose/pull/14151)/[#14139](https://github.com/docker/compose/pull/14139)/[#14145](https://github.com/docker/compose/pull/14145)/[#14085](https://github.com/docker/compose/pull/14085)/[#14116](https://github.com/docker/compose/pull/14116)としてOPEN。
+  - **難易度**: 項目ごとにばらつきが大きい。ドキュメント修正・命名変更は低いが、C（ライフサイクルエンジン統合、#14081）やF（bake/classicビルドの二重実装解消）に相当する項目は構造的な変更で難易度が高い。
+- [#14050](https://github.com/docker/compose/issues/14050) Use annotations instead of labels for Compose-managed container runtime state
+  - Composeがcontainer-numberやconfig-hash等のruntime状態をラベルに保存しているため、`docker commit`でイメージに焼き込まれてしまう問題への対応提案。
+  - 状態系ラベルをannotationsに移行する案だが、Engine API側にannotationフィルタが存在せずブロッカーとなっている（`needs-engine-feature`ラベル）。
+  - **対応状況**: コメント0件、PRも無し。issue本文自体がブロッカー（Engine APIのannotationフィルタ欠如）を明記しており、upstream(moby)側の対応待ちで事実上停止中。
+  - **難易度**: 高。dual-write/fallback-readの移行フェーズ設計自体は compose 単体で可能だが、`config-hash`（presence filter）や`container-number`（equality filter）等サーバーサイドfilterに使っているラベルの移行は moby 側にannotationフィルタが実装されるまで着手不可。
+- [#14182](https://github.com/docker/compose/issues/14182) [BUG] failed to get console: provided file is not a console
+  - v5.5.1で`docker compose build > /dev/null`（標準出力をリダイレクト）するとエラーになる、v5.5.0では発生しないというリグレッション報告。
+  - **対応状況**: 原因特定済み・修正PR作成済み。[PR #14090](https://github.com/docker/compose/pull/14090)（WindowsのTTY progress対応のためstdoutの実体を取得する変更）が原因で、リダイレクトされたstdoutも`ConsoleFromFile`に渡ってしまい失敗していた。[PR #14184](https://github.com/docker/compose/pull/14184)（OPEN）でstdoutが実際にターミナルの時だけunwrapするよう修正済み。
+  - **難易度**: 低。原因・修正とも特定済みで、あとはレビュー・マージを待つのみ。
+- [#13985](https://github.com/docker/compose/issues/13985) [BUG] Attached `up` never exits after external `stop`+`down` when a container is in restart backoff (regression in v2.39.3)
+  - restart backoff中のコンテナが外部から`stop`+`down`されると、`docker events`上`die`イベントが発火せず`stop`→`destroy`のみになるため、`die`イベント検知に依存する`up`監視ロジック（#13210由来）が永遠にハングするリグレッション。
+  - **対応状況**: 原因・再現手順ともbisectで特定済み。[PR #13990](https://github.com/docker/compose/pull/13990)（OPEN）で`destroy`も終端として扱い、`stop`時にコンテナをinspectして本当の停止か`restart`由来の一時停止か区別するよう修正済み。関連テスト[#14023](https://github.com/docker/compose/pull/14023)（OPEN）、ドキュメント[#14024](https://github.com/docker/compose/pull/14024)は既にマージ済み。
+  - **難易度**: 低〜中。修正自体は書かれ済みでレビュー待ち。ただし`watch`のsync+restart（#13161）との既存挙動を壊さないよう「一時的なstop」と「確定的なstop」を区別する必要があった点がやや繊細。
+- [#13939](https://github.com/docker/compose/issues/13939) pre_start containers don't inherit/support extra_hosts
+  - `pre_start`コンテナ作成時の`HostConfig`が`AutoRemove`/`Privileged`/`VolumesFrom`/`NetworkMode`の4項目しか設定しておらず、`service.extra_hosts`が本来のserviceコンテナには反映されるのにpre_startコンテナには反映されない、というバグ。
+  - **対応状況**: [PR #13940](https://github.com/docker/compose/pull/13940)（OPEN）で`ExtraHosts: service.ExtraHosts.AsList(":")`を追加する修正が既に提出済み。より広範な[#14093](https://github.com/docker/compose/pull/14093)（compose-spec の Jobs/ContainerSpec 導入）でも根本的に解消される見込み。
+  - **難易度**: 低。1行程度の追加で修正済み、レビュー待ち。
+- [#13934](https://github.com/docker/compose/issues/13934) pre_start/init-Containers should support own/overwritten Volumes
+  - `pre_start`コンテナは`VolumesFrom`で親serviceの全volumeを継承するのみで、(1) 追加のvolumeを定義する、(2) 親serviceのvolumeをread-write等に上書きする、という手段が無いという要望。
+  - **対応状況**: 専用PRは無し。[#14093](https://github.com/docker/compose/pull/14093)（compose-spec の Jobs/ContainerSpec 導入、OPEN）でpre_startが`ContainerSpec`/`WorkloadSpec`をフルに持つようになれば、その一部として解消される見込み。
+  - **難易度**: 中。`#13939`と同種の`HostConfig`拡張だが、追加volumeの定義方法・親volumeの上書きルールの設計判断が必要な分、単純な1フィールド追加より複雑。#14093の着地待ち。
+- [#13839](https://github.com/docker/compose/issues/13839) Use COMPOSE_PROJECT_NAME or -p with the `up` command
+  - 元の compose ファイル群が手元に無くても`COMPOSE_PROJECT_NAME`/`-p`だけで既存プロジェクトに対して`up`（再構成・`--force-recreate`等）を実行したい、という要望（`compose ls`の`CONFIG FILES`列に必要な情報がある、というのが根拠）。
+  - **対応状況**: メンテナ(ndeloof)が「`CONFIG FILES`はDocker Desktopのために入れたもので、環境変数などの情報が欠けており`up`の再構成には不十分。むしろ紛らわしいので無くしたいレガシー」と否定的な反応。コントリビュータ(tanikush)が着手を申し出ているが、PRはまだ無い。
+  - **難易度**: 中〜高。単なる実装作業ではなく、メンテナが望む方向性（`CONFIG FILES`依存を弱める）とissueの要望（`CONFIG FILES`を活用する）が逆向きのため、まず設計合意が必要。#14074セクションFで指摘されているプロジェクト解決の不整合とも関連する根の深い問題。
