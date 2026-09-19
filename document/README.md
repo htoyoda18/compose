@@ -11,3 +11,4 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [roadmap/](./roadmap/README.md) | OSS 内部理解に必要な概念・前提知識のロードマップ（セクションごとにファイル分割）  |
 | [fixme.md](./fixme.md)   | リポジトリ内 FIXME コメントの調査状況（随時再スキャンして更新）          |
 | [todo.md](./todo.md)     | リポジトリ内 TODO コメントの調査状況                                     |
+| [pr-review-patterns.md](./pr-review-patterns.md) | 自分が出したPRのレビュー指摘の傾向分析と、次にPRを出す前のセルフチェックリスト |
