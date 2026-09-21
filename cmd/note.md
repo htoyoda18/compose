@@ -10,7 +10,7 @@
   - Docker Compose の全コマンド実装
   - `up`/`down`/`build`/`run` など 45 以上のサブコマンドと、それらが共有するオプション定義を格納する
   - `compose.go` の `RootCommand` が cobra のルートコマンドを構築し、各サブコマンドを登録するエントリーポイントになっている
-- display
+- [display](display/note.md)
   - 表示モード管理
   - TTY/Plain/JSON/Quiet といった進捗表示モード (`mode.go`) と、各モードに対応するレンダラー実装 (`tty.go` など) を持つ
   - コマンド実行中に発生するイベントをどう画面に描画するかを一元的に管理する
