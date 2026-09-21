@@ -4,6 +4,7 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 
 | ファイル                | 内容                                                                     |
 | ------------------------ | ------------------------------------------------------------------------ |
+| [basics.md](./basics.md) | 入門: そもそも Docker とは何か / Docker Compose とは何か（前提知識ゼロから読む用） |
 | [docker.md](./docker.md) | Docker / Docker Compose の一般的な概念・コマンドに関する学習ノート       |
 | [cli.md](./cli.md)       | CLI 実装まわりの概念（トレース、cobra、OpenTelemetry、Docker コンテキスト、スタンドアロン版/プラグイン版）まとめ |
 | [internal.md](./internal.md) | internal/ 配下の実装まわりの概念（インメモリソケット、PID ファイル、実行時ディレクトリ、レジストリ、マニフェスト/blob、シンボリックリンク）まとめ |

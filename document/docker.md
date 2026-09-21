@@ -1,6 +1,6 @@
 # Docker / Docker Compose 学習ノート
 
-Docker および Docker Compose の一般的な概念に関する学習ノート。このリポジトリ（docker/compose）固有の構成・アーキテクチャは [note.md](./note.md)、既知の FIXME/TODO 調査は [fixme.md](./fixme.md) / [todo.md](./todo.md) を参照。
+Docker および Docker Compose の一般的な概念に関する学習ノート。「そもそも Docker / Docker Compose とは何か」という入門的な整理は [basics.md](./basics.md)、このリポジトリ（docker/compose）固有の構成・アーキテクチャは [note.md](./note.md)、既知の FIXME/TODO 調査は [fixme.md](./fixme.md) / [todo.md](./todo.md) を参照。
 
 ## 標準規格
 
