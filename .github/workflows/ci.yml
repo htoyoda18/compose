@@ -33,6 +33,8 @@ jobs:
           - validate-headers
           - validate-docs
           - validate-mocks
+          - relay-lint
+          - relay-test
     steps:
       -
         name: Checkout
@@ -132,6 +134,24 @@ jobs:
       set-meta-labels: true
       meta-images: |
         compose-bin
+      meta-tags: |
+        type=ref,event=pr
+      meta-bake-target: meta-helper
+
+  relay-image-test:
+    if: github.event_name == 'pull_request'
+    uses: docker/github-builder/.github/workflows/bake.yml@a492c6d04fd3315f67230809b44d60cc0acd50b3 # v1.16.0
+    with:
+      runner: amd64
+      target: relay-image-cross
+      cache: true
+      cache-scope: relay-image-test
+      output: image
+      push: false
+      sbom: true
+      set-meta-labels: true
+      meta-images: |
+        compose-relay
       meta-tags: |
         type=ref,event=pr
       meta-bake-target: meta-helper
@@ -369,7 +389,7 @@ jobs:
           find bin/release -type f -exec file -e ascii -- {} +
       -
         name: GitHub Release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: ./bin/release/*
           generate_release_notes: true
