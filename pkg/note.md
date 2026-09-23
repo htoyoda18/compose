@@ -1,18 +1,23 @@
 - [api](api/note.md)
   - Docker Compose API の公開インターフェース
+  - `Compose`インターフェース(Up/Down/Ps等)とOptions/イベント/エラー定義を持つ、実装を持たない契約のみのパッケージ
+  - `compose`がこれを実装し、`mocks`がテスト用にモック実装する
 - bridge
-  - docker-compose v1 → v2 変換
+  - `docker compose bridge`。composeプロジェクトをKubernetes manifest等の別形式に変換する
+  - 「transformerイメージ」をコンテナとして実行して変換するパイプラインと、そのイメージの雛形生成・一覧取得を持つ
 - compose
-  - Docker Compose のコア実装
+  - Docker Compose のコア実装。`api.Compose`インターフェースの実装本体(`composeService`)で、pkg最大(実装68ファイル)
+  - 各ファイルは`cmd/compose`の同名コマンドファイルとほぼ1対1対応し、`up`は観測→計画→並列実行の3段構成になっている
 - dryrun
-  - ドライラン機能 - 実行シミュレーション
+  - `--dry-run`の実装。`client.APIClient`を丸ごと実装した`DryRunClient`が実際のDocker Engineには何も送らず、結果だけ組み立てて返す
 - e2e
-  - End-to-Endテスト
+  - End-to-Endテスト一式。実バイナリと実際のDockerデーモンに対しコマンドを実行して検証する
+  - `scenario.go`の宣言的DSL(compose model+ステップ列)と`checks.go`の観測チェック語彙で構成される
 - mocks
-  - テスト用モック
+  - テスト用モック。`mockgen`により`pkg/api`のインターフェースから自動生成される
 - [remote](remote/note.md)
-  - リモート実行機能
+  - リモート実行機能。`git://`/`oci://`で指定されたcompose設定を取得するローダーとキャッシュ先の管理
 - utils
-  - ユーティリティ関数集
+  - ユーティリティ関数集。ジェネリクスの`Set[T]`、スレッドセーフな`SafeBuffer`、行分割`Writer`などの小さなヘルパー
 - watch
-  - ファイル監視機能
+  - ファイル監視機能。`docker compose watch`の中核で、OS別のファイル監視実装とdebounce、`.dockerignore`判定を持つ
