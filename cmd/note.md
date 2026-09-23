@@ -1,6 +1,6 @@
 - [cmdtrace](cmdtrace/note.md)
   - コマンド実行のトレース機能
-  - cobra コマンドの `PersistentPreRunE` から呼ばれ、Docker コンテキストや OTEL_ 環境変数を元に tracer を初期化し、コマンド全体を覆うルートスパンを生成する
+  - cobra コマンドの `PersistentPreRunE` から呼ばれ、Docker コンテキストや OTEL\_ 環境変数を元に tracer を初期化し、コマンド全体を覆うルートスパンを生成する
   - スパンの終了・エクスポートまで面倒を見て、CLI 全体の実行を OpenTelemetry で可視化する
 - [compatibility](compatibility/note.md)
   - 旧バージョンとの互換性維持
@@ -26,3 +26,31 @@
   - プログラムのエントリーポイント
   - スタンドアロン起動時は引数を `compatibility.Convert` でプラグイン形式に変換したうえで、`pluginMain` から CLI プラグインとして起動する
   - `cmdtrace.Setup` によるトレース初期化やルートコマンドの構築もここで行う
+
+## 用語
+
+- コマンド実行のトレース
+  - OpenTelemetry(OTel)による計測のこと。「どのコマンドが・いつ始まり・何秒かかり・成功したか」をスパン単位で記録し、OTLP エンドポイントへ送信する
+  - 送信先が設定されていなければ何も送らないので、通常利用では実質無効
+- Docker デーモン(dockerd)
+  - `docker` コマンド(CLI)はクライアントにすぎず、実際にコンテナを起動・管理するのはデーモンというサーバプロセス。CLI は必ずどこかのデーモンに接続してリクエストを送る
+  - 接続先は `unix:///var/run/docker.sock`(ローカル)や `ssh://user@host`(リモートサーバ)など。**コンテナの数ではなく、どのマシンの上でコンテナを動かすかの話**
+- Docker コンテキスト
+  - 接続先エンドポイント+TLS 設定などのメタデータに名前を付けて保存し、`docker context use` で切り替えられるようにしたもの
+  - 例: `default`(ローカルの socket)、`desktop-linux`(Docker Desktop が管理する VM 内のエンジン)、自作の `prod`(SSH 越しのリモート)。`prod` に切り替えて `docker compose up` すると、手元ではなくリモートサーバ上でコンテナが起動する
+  - cmdtrace はこのメタデータ内の `otel` フィールドからトレース送信先を自動検出する(`internal/tracing/docker_context.go`)ため、Docker Desktop 利用時は設定なしで連携できる
+- ルートスパン
+  - スパン = トレース上の 1 区間(開始/終了時刻・属性・成否を持つ)。親を持たない最上位のスパンがルートスパン
+  - cmdtrace は `cli/<コマンド名>`(例 `cli/watch-alpha`)という 1 本でコマンド全体を覆い、実行中の個々の処理はその子スパンとしてぶら下がる
+- スタンドアロン
+  - `docker-compose` という単体バイナリを直接実行する形態(v1 からの互換パス)。対して `docker compose` は docker CLI のプラグインとして起動される形態
+  - 判定は `plugin.RunningStandalone()`。docker CLI から起動された場合は第 1 引数が `docker-cli-plugin-metadata` になる、という規約を利用して見分けている
+- プラグイン呼び出し
+  - docker CLI がプラグインを `docker <グローバルフラグ> compose <サブコマンド>` の並びで起動する呼び出し規約のこと
+  - `--context`/`--host`/`--tls` 系は `compose` より**前**に置く必要があるため、`compatibility.Convert` がスタンドアロンの引数列をこの並びに組み替えている
+- TTY/Plain/JSON/Quiet
+  - 進捗表示のモード(`cmd/display`)。`--progress` の指定か、出力先が端末かどうかの自動判定で決まる
+  - TTY = ANSI エスケープで同じ行を上書きしスピナーと経過時間を描画
+  - Plain = 1 行ずつ追記(パイプ/CI 向け)
+  - JSON = 1 行 1JSON の機械可読出力
+  - Quiet = 出力なし
