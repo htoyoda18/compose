@@ -12,4 +12,6 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [roadmap/](./roadmap/README.md) | OSS 内部理解に必要な概念・前提知識のロードマップ（セクションごとにファイル分割）  |
 | [fixme.md](./fixme.md)   | リポジトリ内 FIXME コメントの調査状況（随時再スキャンして更新）          |
 | [todo.md](./todo.md)     | リポジトリ内 TODO コメントの調査状況                                     |
+| [next-tasks.md](./next-tasks.md) | pr-trends.md の基準で選んだ、まだ誰も着手していないタスク候補（検証済みの上位 6 件と、次点・やらないもの） |
+| [pr-trends.md](./pr-trends.md) | 直近のクローズ済み PR 150 件と main のコミット履歴の調査。どんな PR がマージされ／閉じられているか、コミットの積み方、PR を出す前のチェックリスト |
 | [pr-review-patterns.md](./pr-review-patterns.md) | 自分が出したPRのレビュー指摘の傾向分析と、次にPRを出す前のセルフチェックリスト |
