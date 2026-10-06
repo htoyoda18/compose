@@ -1,4 +1,6 @@
-## Issue 調査状況
+# Issue 調査状況
+
+← [document 一覧](../README.md)
 
 - [#14163](https://github.com/docker/compose/issues/14163) Support Mounts and Secrets in Compose Provider Extensions
   - Compose providerは環境変数でしかservicesに情報を注入できず、secret/mountのようなファイルベースの注入手段が無い、という機能要望。

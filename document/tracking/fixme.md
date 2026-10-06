@@ -1,3 +1,9 @@
+# FIXME コメント調査状況
+
+リポジトリ内の FIXME コメントの調査状況（随時再スキャンして更新）。
+
+← [document 一覧](../README.md)
+
 ## 現存するFIXME（2026-08-24 upstream/main時点で再スキャン）
 
 - go.mod:215（旧160）

@@ -1,6 +1,8 @@
 # 次に着手できるタスク候補
 
-[pr-trends.md](./pr-trends.md) の結論（実在する問題か／根本原因を直すか／メンテナの作業とぶつからないか／
+← [document 一覧](../README.md)
+
+[pr-trends.md](../contributing/pr-trends.md) の結論（実在する問題か／根本原因を直すか／メンテナの作業とぶつからないか／
 メンテナの後押しがあるか）を物差しにして、「まだ誰も着手していない、外部から着手できて、
 プロジェクトを本当に良くするタスク」を探した結果。
 
@@ -31,7 +33,7 @@
 
 - **出典**: ndeloof の [#14177](https://github.com/docker/compose/pull/14177) インラインレビュー（`model.go:49`）
   「Two pre-existing issues here… worth a follow-up」
-- **場所**: [pkg/compose/model.go](../pkg/compose/model.go) `ensureModels`
+- **場所**: [pkg/compose/model.go](../../pkg/compose/model.go) `ensureModels`
   - `availableModels, err := mdlAPI.ListModels(ctx)` の `err` を一度も見ていない（失敗すると空リスト扱いになり、全モデルを pull しに行く）
   - 各 goroutine が外側の `err` に `err = mdlAPI.PullModel(...)` と代入している → 複数のモデルを pull すると**データ競合**
 - **直し方**: `ListModels` の `err` を返す。goroutine 内は `err :=` にする。
@@ -62,11 +64,11 @@
   | `docker compose -p optdep start`  | `service "init" didn't complete successfully: exit 1` で失敗、`web` は exited |
   | `docker compose -p optdep restart` | 正常（`down.go` 側で補正しているため） |
 - **根本原因**:
-  - `-p` を付けて `-f` を付けないと、compose.yaml があってもファイルを読まない（[cmd/compose/compose.go](../cmd/compose/compose.go) `projectOrName` の `if len(o.ConfigPaths) > 0 || o.ProjectName == ""`）。
+  - `-p` を付けて `-f` を付けないと、compose.yaml があってもファイルを読まない（[cmd/compose/compose.go](../../cmd/compose/compose.go) `projectOrName` の `if len(o.ConfigPaths) > 0 || o.ProjectName == ""`）。
     代わりにコンテナのラベルからプロジェクトを組み立て直す（`projectFromName`）。
   - そのラベル `com.docker.compose.depends_on` には `サービス名:condition:restart` しか書かれず、**`required` が保存されない**
-    （[pkg/compose/create.go](../pkg/compose/create.go) の `fmt.Sprintf("%s:%s:%t", dep, d.Condition, d.Restart)`）。
-  - 読み戻すときに `required := true` と決め打ちしている（[pkg/compose/compose.go](../pkg/compose/compose.go) `projectFromName`）。
+    （[pkg/compose/create.go](../../pkg/compose/create.go) の `fmt.Sprintf("%s:%s:%t", dep, d.Condition, d.Restart)`）。
+  - 読み戻すときに `required := true` と決め打ちしている（[pkg/compose/compose.go](../../pkg/compose/compose.go) `projectFromName`）。
   - `stop`/`restart`/`kill`/`down` は `down.go` で `Required = false` に補正しているが、`start` は補正していない。
 - **直し方の案**: ラベルに 4 つ目のフィールド `:required` を書く。読み戻すときは、フィールドが無ければ `true`（古いラベルとの互換）。
   あわせてラベルを書く順をソートする（今は map の反復順で毎回変わる）。
@@ -78,7 +80,7 @@
 
 - **出典**: ndeloof の [#14091](https://github.com/docker/compose/pull/14091) レビュー
   「The agreed follow-ups (down scoping vs dependents, list-failure aborting teardown, …) remain open — fine by me to land them separately.」
-- **場所**: [pkg/compose/down.go](../pkg/compose/down.go) `removePreStartHookContainers`
+- **場所**: [pkg/compose/down.go](../../pkg/compose/down.go) `removePreStartHookContainers`
   - (a) `down web` のようにサービスを指定すると、フックの後始末は指定サービスだけ。実際のティアダウンは依存先も巻き込むので、依存先のフックコンテナが残る。
   - (b) doc コメントは「失敗してもティアダウンは中断しない」と書いているのに、`ContainerList` が失敗すると `return err` し、
     呼び出し側（`down.go` 120 行付近）も `return err` するので、**ネットワーク・ボリューム・イメージの削除がまるごと飛ぶ**。
@@ -89,9 +91,9 @@
 ## 4. classic build の `--push` がプロジェクト全体をサービス数だけ push する
 
 - **出典**: エピック #14074 F「classic `--push` pushes the whole project once per built service」（🐛 印付き、「standalone issue に切り出す価値あり」とされている）
-- **場所**: [pkg/compose/build_classic.go](../pkg/compose/build_classic.go) のサービスごとのコールバック内
+- **場所**: [pkg/compose/build_classic.go](../../pkg/compose/build_classic.go) のサービスごとのコールバック内
   `if options.Push { return s.push(ctx, project, api.PushOptions{}) }`。
-  `push()`（[pkg/compose/push.go](../pkg/compose/push.go)）は project の全サービスを対象にする。
+  `push()`（[pkg/compose/push.go](../../pkg/compose/push.go)）は project の全サービスを対象にする。
 - **影響**: classic builder（`DOCKER_BUILDKIT=0`、または buildx が無い環境）のときだけ。
   - N 個のサービスをビルドすると N×N 回 push する
   - `build --push web` で、ビルドしていない依存サービス `db` の古いイメージまで push する
@@ -103,16 +105,16 @@
 
 - **実機での再現**: `docker compose config -q --services` / `--volumes` / `--images` / `--hash='*'` / `--variables` は、
   `-q`（「検証だけして何も出力しない」）なのに一覧を出力する。`config -q` 単体は何も出さない。
-- **根本原因**: `-q` を `os.Stdout = devnull` という差し替えで実装している（[cmd/compose/config.go](../cmd/compose/config.go) の PreRunE）。
+- **根本原因**: `-q` を `os.Stdout = devnull` という差し替えで実装している（[cmd/compose/config.go](../../cmd/compose/config.go) の PreRunE）。
   docker/cli は起動時に stdout を掴んでいるので、`dockerCli.Out()` 経由の出力には効かない。
-  素の `config -q` が静かなのは、別の早期 return があるから。`build -q` も同じ実装（[cmd/compose/build.go](../cmd/compose/build.go)）。
+  素の `config -q` が静かなのは、別の早期 return があるから。`build -q` も同じ実装（[cmd/compose/build.go](../../cmd/compose/build.go)）。
 - **衝突リスク**: 中。ndeloof の #14046（`config --filter`）が `config.go` を触っている。
 - **注意**: 「`-q` と `--services` の同時指定はエラーにすべき」という判断もありうるので、どちらに倒すか issue で聞く。
 
 ## 6. classic build のイメージに compose ラベルが付かない
 
 - **出典**: エピック #14074 F
-- **場所**: プロジェクト／サービスのラベルを付ける `getImageBuildLabels`（[pkg/compose/build.go](../pkg/compose/build.go)）の呼び出し元は bake だけ。
+- **場所**: プロジェクト／サービスのラベルを付ける `getImageBuildLabels`（[pkg/compose/build.go](../../pkg/compose/build.go)）の呼び出し元は bake だけ。
   classic は `com.docker.compose.image.builder=classic` しか付けない（`build_classic.go`）。
 - **影響**: `watch` の再ビルドや `down --rmi` で、classic が残した dangling イメージがプロジェクトのものと認識されず、掃除されない。
 - **直し方**: classic の `imageBuildOptions` でも `getImageBuildLabels` を使う。純粋関数なので表形式のテストが書きやすい。4 と同じ issue で相談するとよい。
@@ -147,8 +149,4 @@
 
 ## 調査中に分かったプロセス上の注意
 
-- **`status/approved` ラベルはリポジトリに存在しない**。CONTRIBUTING.md は「AI を使った PR は `status/approved` の issue に紐づけること」と書いているが、
-  実際には付けようがない。だから「メンテナがレビューや issue で明示的に後押ししたもの」を選ぶのが現実的な代わりになる（上の 1 と 3）。
-- **AI_POLICY.md:「AI の `Co-Authored-By` トレーラーは付けない」**。開示はコミットではなく PR の説明に書く。
-  メンテナのコミットに Claude のトレーラーがあるのは「この規則は外部からのコントリビューションに適用する」という例外のため。
-- PR を開く前に `AI_AGENT_DISCLOSURE.md` を、自分でレビューした上で削除する（[pr-trends.md](./pr-trends.md) §8）。
+[contributing/pr-trends.md §8 の補足](../contributing/pr-trends.md#補足-next-tasks-の調査中に分かったプロセス上の注意) に移した。

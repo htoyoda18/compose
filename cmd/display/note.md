@@ -276,7 +276,7 @@ ID とテキストの間を1スペースに保てば壊れないことは確認�
 
 ## 他のnote.mdとの関連
 
-- [document/pr-review-patterns.md](../../document/pr-review-patterns.md)
+- [document/contributing/pr-review-patterns.md](../../document/contributing/pr-review-patterns.md)
   テーマ④(出力はアプリの表示基盤を経由すべき)は、まさにこの`cmd/display`が
   提供する`api.EventProcessor`のことを指している。`logrus.Warn`等で直接
   ログ出力すると、ここでまとめたTUI描画を経由しないため

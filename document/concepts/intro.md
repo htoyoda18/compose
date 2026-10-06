@@ -1,8 +1,8 @@
 # 入門: そもそも Docker / Docker Compose とは
 
-前提知識ゼロから読み始めるための入門メモ。個々の用語の詳細や実装との対応は
-[docker.md](./docker.md)、このリポジトリの構成は [note.md](./note.md)、
-内部理解のための学習順序は [roadmap/](./roadmap/README.md) を参照。
+前提知識ゼロから読み始めるための入門メモ。読んでいて出た疑問の Q&A は [intro-qa.md](./intro-qa.md)。
+個々のトピックの詳細は同じ `concepts/` 配下の各ファイル、このリポジトリの構成は
+[codebase/](../codebase/overview.md)、学習順序は [document 一覧](../README.md) を参照。
 
 ## 1. Docker とは何か
 
@@ -42,7 +42,7 @@ Linux VM の上で動くので、VM のコストは別途かかる。
 - **cgroup**: CPU・メモリなどの「使える量」を制限する
 - **capability**: root 権限を細分化して、必要な分だけ与える
 
-→ 詳細は [docker.md #コンテナ基盤技術](./docker.md)
+→ 詳細は [container-tech.md](./container-tech.md)
 
 ### Docker は Linux 上でしか動かない
 
@@ -92,7 +92,7 @@ Windows には「Windows カーネルの上で動く Windows コンテナ」も�
 - 合わないものは QEMU によるエミュレーションで一応動くが、大幅に遅い
 
 → Compose 側のプラットフォーム解決は
-[docker.md #ビルド](./docker.md) を参照
+[compose-concepts.md #ビルドとプラットフォーム解決](./compose-concepts.md#ビルドとプラットフォーム解決) を参照
 
 ### 基本用語
 
@@ -116,59 +116,8 @@ docker CLI  ──(REST API / Unix socket)──>  dockerd  ──>  containerd 
 ### dockerd とは
 
 **Docker Engine の本体であるデーモンプロセス**。`docker` コマンドの実体はここにある。
-
-#### 役割
-
-- **REST API サーバー**: `docker` CLI からのリクエストを受け付ける HTTP API を公開する。
-  待ち受け先はデフォルトで Unix ドメインソケット `/var/run/docker.sock`
-  （TCP で公開する設定も可能だが、実質ホストの root 権限を渡すことになるので危険）
-- **上位オブジェクトの管理**: イメージ、コンテナ、ボリューム、ネットワークといった
-  「Docker の概念」を管理するのは dockerd。コンテナの状態や設定を保持している
-- **ネットワーク構築**: bridge ネットワークの作成、iptables/nftables 操作による
-  ポートフォワード（`-p 8080:80`）、コンテナ名の DNS 解決
-- **ボリューム管理**: ボリュームの作成・マウント・ドライバの扱い
-- **イメージの取得と保管**: レジストリ認証、pull/push、レイヤーの展開と保管
-- **ログ収集**: コンテナの stdout/stderr を logging driver 経由で集める（`docker logs`）
-- **下位ランタイムへの委譲**: 実際のコンテナ起動は自分でやらず containerd に任せる
-
-#### containerd / runc との分担
-
-もともと dockerd が全部やっていたが、OCI 標準化にあわせて層が分離された。
-
-| コンポーネント | 担当 |
-| --- | --- |
-| `dockerd` | Docker としての高レベル機能（API, イメージ, ネットワーク, ボリューム, ログ） |
-| `containerd` | コンテナのライフサイクル管理（作成/開始/停止/監視）、イメージの実体管理。常駐デーモン |
-| `containerd-shim` | コンテナ 1 つごとに常駐し、親デーモンとコンテナを切り離す。これにより dockerd を再起動しても稼働中コンテナは死なない |
-| `runc` | 最終的に namespace / cgroup を設定してプロセスを起動する。OCI Runtime Spec の実装。起動したら終了する短命プロセス |
-
-つまり `docker run` は
-`docker CLI → (API) → dockerd → (gRPC) → containerd → shim → runc → コンテナ`
-という流れ。
-
-#### 押さえておくと役立つ性質
-
-- **クライアント / サーバー構成である**: CLI とデーモンは別プロセスなので、
-  リモートの dockerd を操作することもできる（`DOCKER_HOST`, `docker context`）。
-  Mac / Windows で動くのはまさにこれで、CLI はホスト側、dockerd は Linux VM 側にいる
-- **root で動いている**: namespace/cgroup 操作に特権が必要なため。
-  `docker.sock` へのアクセス権 ≒ root 権限、という点はセキュリティ上の定番の注意点
-  （権限を落として動かす rootless モードもある）
-- **設定ファイルは `/etc/docker/daemon.json`**: ログドライバ、レジストリミラー、
-  デフォルトアドレスプールなどを指定する
-- **状態の持ち主は dockerd**: Compose が自前の状態 DB を持たず、ラベル検索で
-  自分の管理対象を見つけられるのは、dockerd が状態を持っていてくれるから
-  （→ [プロジェクトという単位](#プロジェクトという単位)）
-
-#### Docker Compose から見た dockerd
-
-このリポジトリのコードも、結局は **dockerd の API を叩くクライアント**にすぎない。
-
-- `compose.yaml` を読んで「望ましい状態」を作る
-- dockerd の API に問い合わせて「実際の状態」を得る（ラベルで絞り込み）
-- 差分を埋めるように dockerd の API を呼ぶ（コンテナ作成/削除/起動…）
-
-→ 詳細は [roadmap/docker-engine.md](./roadmap/docker-engine.md)
+役割・containerd / runc との分担・押さえておくと役立つ性質は
+[docker-engine.md](./docker-engine.md) にまとめた。
 
 ### 最小の流れ
 
@@ -267,7 +216,7 @@ Compose は自前の状態データベースを持たない。代わりに、作
 `com.docker.compose.project` などの**ラベル**を付け、次回はラベルで絞り込んで
 「自分が管理しているリソース」を見つけ出す。Docker Engine 自体が状態の保管場所になっている。
 
-→ 詳細は [docker.md #Docker Compose の内部アーキテクチャ](./docker.md)
+→ 詳細は [compose-concepts.md](./compose-concepts.md)
 
 ### Docker Compose が提供する主なもの
 
@@ -288,7 +237,7 @@ Compose は自前の状態データベースを持たない。代わりに、作
   実装（このリポジトリ）とは別リポジトリで管理されている
 - **ファイル名**: `compose.yaml` が現在の推奨。`docker-compose.yml` は後方互換で読まれる
 
-→ 詳細は [cli.md](./cli.md)（プラグイン版/スタンドアロン版の差異）
+→ 詳細は [codebase/cli.md #プラグイン版とスタンドアロン版](../codebase/cli.md#プラグイン版とスタンドアロン版)
 
 ## 5. このリポジトリは何なのか
 
@@ -301,19 +250,16 @@ Compose は自前の状態データベースを持たない。代わりに、作
 2. 内部表現と Docker Engine の実際の状態を比較し、差分を計算する
 3. Docker Engine API を叩いて、コンテナ・ネットワーク・ボリュームを作る/消す/作り直す
 
-| ディレクトリ | 役割 |
-| --- | --- |
-| `cmd/compose/` | CLI のコマンド定義（cobra）。フラグ解析とユーザー入力の受け取り |
-| `pkg/api/` | Compose の操作を表すインターフェース定義 |
-| `pkg/compose/` | 実際のロジック本体（up/down/build/収束処理など） |
-| `pkg/e2e/` | E2E テスト |
+ディレクトリごとの役割とレイヤー構成は [codebase/architecture.md](../codebase/architecture.md) を参照。
 
-→ 詳細は [note.md](./note.md) と [roadmap/architecture.md](./roadmap/architecture.md)
+## 参考リンク
+
+- https://y-ohgi.com/introduction-docker/2_component/image/
 
 ## 次に読むもの
 
-1. [docker.md](./docker.md) — 用語・コマンド・内部アーキテクチャの詳細メモ
-2. [note.md](./note.md) — このリポジトリの構成と読み方
-3. [roadmap/README.md](./roadmap/README.md) — 内部実装まで理解するための学習ロードマップ
+1. [compose-concepts.md](./compose-concepts.md) — Compose 固有の概念の詳細
+2. [codebase/overview.md](../codebase/overview.md) — このリポジトリの構成と読み方
+3. [document 一覧](../README.md) — 内部実装まで理解するための学習ロードマップ
 
-← [document 一覧](./README.md)
+← [document 一覧](../README.md)

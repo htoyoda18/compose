@@ -208,22 +208,18 @@ glours はテンプレートの旧版に近い `**What I did**` / `**Related iss
 9. **コントリビューションファーミング禁止**: 検証していない PR、issue を立てずに出す AI 生成 PR、1 つの変更をわざと細かく分けること、具体的な利益の無い見た目だけの変更
 10. 変更はタスクの範囲に絞る（バグ修正のついでに無関係なリファクタ・typo 修正・整形をしない）
 
+### 補足: next-tasks の調査中に分かったプロセス上の注意
+
+- **`status/approved` ラベルはリポジトリに存在しない**。CONTRIBUTING.md は「AI を使った PR は `status/approved` の issue に紐づけること」と書いているが、
+  実際には付けようがない。だから「メンテナがレビューや issue で明示的に後押ししたもの」を選ぶのが現実的な代わりになる（[tracking/next-tasks.md](../tracking/next-tasks.md) の 1 と 3）。
+- **AI_POLICY.md:「AI の `Co-Authored-By` トレーラーは付けない」**。開示はコミットではなく PR の説明に書く。
+  メンテナのコミットに Claude のトレーラーがあるのは「この規則は外部からのコントリビューションに適用する」という例外のため（§5-4）。
+- PR を開く前に `AI_AGENT_DISCLOSURE.md` を、自分でレビューした上で削除する（上の 7）。
+
 > 自分の作業ブランチ (`toyo/study`) の `CLAUDE.md` は upstream より古い。upstream の `AGENTS.md` には
 > 「All agents must conform to AI_POLICY.md」と「Keep changes scoped to the task」が追加されている。
 
 ## 9. 次に PR を出す前のチェックリスト
 
-上の調査から引き出した、自分用のチェック項目。[pr-review-patterns.md](./pr-review-patterns.md) のチェックリストと合わせて使う。
-
-- [ ] 対象の issue に `status/approved` が付いているか（無ければ PR を出す前に issue で相談する）
-- [ ] 過去に同じ提案が却下されていないか（issue を検索して重複を確かめる）
-- [ ] **最新の `upstream/main` で**バグを再現できたか。再現手順とエラーの実物を説明文に貼れるか
-- [ ] 症状を抑えるのではなく、根本原因の場所を直しているか（compose-go や docker/cli 側で直すべきものではないか）
-- [ ] plan engine / provider など、メンテナが今まさに書き換えている領域とぶつかっていないか
-- [ ] 不具合の再現は e2e の `Scenario` DSL で書いたか（[pkg/e2e/SCENARIO.md](../pkg/e2e/SCENARIO.md)）
-- [ ] コミットは論理単位ごとに squash したか（基本は 1 コミット）。`rebase main` で追従したか
-- [ ] コミットメッセージは `type(scope): 修正後の振る舞い` の形か。本文に「なぜ」を書いたか。`-s` で sign-off したか
-- [ ] AI の `Co-Authored-By` トレーラーを付けていないか（AI_POLICY.md。AI 利用の開示は PR の説明に書く）
-- [ ] PR テンプレートを埋めたか（Fixes #、Testing done、AI tool used）
-- [ ] `AI_AGENT_DISCLOSURE.md` を、自分でレビューした上で削除したか
-- [ ] docker-agent / copilot のレビューコメントにも対応したか
+上の調査から引き出したチェック項目は、[pr-review-patterns.md](./pr-review-patterns.md) のものと合わせて
+[checklist.md](./checklist.md) にまとめた。
