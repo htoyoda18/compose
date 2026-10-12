@@ -2,6 +2,7 @@
 
 コンテナを実現している Linux カーネルの機能と、その周辺の考え方。
 ネットワークまわりは [networking.md](./networking.md)、イメージの形式は [oci.md](./oci.md) を参照。
+読んでいて出た疑問の Q&A は [container-tech-qa.md](./container-tech-qa.md)。
 
 ← [document 一覧](../README.md)
 

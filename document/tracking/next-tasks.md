@@ -11,18 +11,19 @@
 - 調べたもの: open issue 全 51 件、open PR 全 37 件、2026-08-15 以降にマージされた PR 約 130 件の本文とレビューコメント、
   エピック [#14074](https://github.com/docker/compose/issues/14074) と [#14081](https://github.com/docker/compose/issues/14081) の未チェック項目、
   新しく追加された TODO と `t.Skip`
+- 進捗の最終更新: 2026-10-09
 - 「検証」列の意味: **実機** = 自分で upstream main をビルドして再現した / **コード** = 現行コードを読んで確認した（実行はしていない）
 
 ## 結論（先にやる順）
 
-| 順 | タスク | 種類 | 検証 | 後押し | 衝突リスク | 規模 | 最初の一手 |
-| -: | ------ | ---- | ---- | ------ | ---------- | ---- | ---------- |
-| 1 | [`ensureModels` のエラー無視とデータ競合](#1-ensuremodels-のエラー無視とデータ競合) | バグ | コード | ◎ メンテナがレビューで「フォローアップに値する」 | 低 | S | そのまま PR（レビューコメントを引用） |
-| 2 | [`start -p` で任意の依存サービスが必須扱いになる](#2-start--p-で任意の依存サービスが必須扱いになる) | バグ（未報告） | **実機** | — | 中〜高（#14081 Lot 2） | S | **issue を立てる**（#14081 にも一言） |
-| 3 | [`down` の pre_start フックコンテナ後始末の残作業](#3-down-の-pre_start-フックコンテナ後始末の残作業) | バグ | コード | ◎ メンテナが「別 PR で出してよい」 | 低〜中 | S〜M | そのまま PR（レビューコメントを引用） |
-| 4 | [classic build の `--push` がプロジェクト全体をサービス数だけ push する](#4-classic-build-の---push-がプロジェクト全体をサービス数だけ-push-する) | バグ | コード | ○ エピック #14074 に 🐛 として記載 | 低 | S | issue を立てる（エピックから切り出す） |
-| 5 | [`config -q` が一覧系フラグと組み合わせると出力する](#5-config--q-が一覧系フラグと組み合わせると出力する) | バグ | **実機** | ○ エピック #14074 E に記載 | 中（#14046） | S〜M | issue を立てる |
-| 6 | [classic build のイメージに compose ラベルが付かない](#6-classic-build-のイメージに-compose-ラベルが付かない) | バグ | コード | ○ エピック #14074 F | 低 | S | 4 と同じ issue でまとめて相談 |
+| 順 | タスク | 種類 | 検証 | 後押し | 衝突リスク | 規模 | 最初の一手 | 進捗 |
+| -: | ------ | ---- | ---- | ------ | ---------- | ---- | ---------- | ---- |
+| 1 | [`ensureModels` のエラー無視とデータ競合](#1-ensuremodels-のエラー無視とデータ競合) | バグ | コード | ◎ メンテナがレビューで「フォローアップに値する」 | 低 | S | そのまま PR（レビューコメントを引用） | 🟡 [#14284](https://github.com/docker/compose/pull/14284) 上流の修正リリース待ち |
+| 2 | [`start -p` で任意の依存サービスが必須扱いになる](#2-start--p-で任意の依存サービスが必須扱いになる) | バグ（未報告） | **実機** | — | 中〜高（#14081 Lot 2） | S | **issue を立てる**（#14081 にも一言） | 未着手 |
+| 3 | [`down` の pre_start フックコンテナ後始末の残作業](#3-down-の-pre_start-フックコンテナ後始末の残作業) | バグ | コード | ◎ メンテナが「別 PR で出してよい」 | 低〜中 | S〜M | そのまま PR（レビューコメントを引用） | 🟡 (b) を [#14310](https://github.com/docker/compose/pull/14310) でレビュー待ち。(a)(d) は未着手 |
+| 4 | [classic build の `--push` がプロジェクト全体をサービス数だけ push する](#4-classic-build-の---push-がプロジェクト全体をサービス数だけ-push-する) | バグ | コード | ○ エピック #14074 に 🐛 として記載 | 低 | S | issue を立てる（エピックから切り出す） | 未着手 |
+| 5 | [`config -q` が一覧系フラグと組み合わせると出力する](#5-config--q-が一覧系フラグと組み合わせると出力する) | バグ | **実機** | ○ エピック #14074 E に記載 | 中（#14046） | S〜M | issue を立てる | 未着手 |
+| 6 | [classic build のイメージに compose ラベルが付かない](#6-classic-build-のイメージに-compose-ラベルが付かない) | バグ | コード | ○ エピック #14074 F | 低 | S | 4 と同じ issue でまとめて相談 | 未着手 |
 
 1 と 3 は、メンテナが「誰かやってね」とレビューで書き残したまま放置されているものなので、**issue を立てなくても受け入れられる見込みが最も高い**。
 信頼を積むなら 1 → 3 → 2 の順が良い。2 は唯一、実機で再現できた未報告のバグで価値は最も高いが、メンテナの大改修とぶつかる位置にあるので issue を立てて判断を仰ぐ。
@@ -39,6 +40,13 @@
 - **直し方**: `ListModels` の `err` を返す。goroutine 内は `err :=` にする。
 - **テスト**: `model_test.go` は存在しない。`plugins_control_test.go` のヘルパープロセス方式を真似る。
 - **着手状況**: 「ensureModels」「ListModels」で検索した限り、issue / PR とも無い。このファイルの最終変更は #14177 自身。
+- **進捗**（2026-10-09）: 自分の PR [#14284](https://github.com/docker/compose/pull/14284) `fix(models): check the model listing error and keep pull errors per goroutine`（OPEN）
+  - ndeloof が APPROVED（2026-10-05）。その後 e2e の `TestComposeModel` が失敗（`error unmarshalling available models`）。
+    `ListModels` のエラーを見るようにしたことで、`docker-model` CLI が stdout に出す余計な出力が表に出た。
+  - glours が CHANGES_REQUESTED（2026-10-06）: 原因は `docker/model-runner` 側（runner の初回インストール時に、進捗表示が stdout に混ざる）。
+    上流で直すまでマージしない方針。修正 [docker/model-runner#1079](https://github.com/docker/model-runner/pull/1079) は 2026-10-06 にマージ済み。
+  - **次の一手**: #1079 を含む docker-model のリリース（2026-10-09 時点の最新は 08-12 の v1.2.8 で、まだ含まれていない）が CI で使えるようになったら、
+    rebase して `TestComposeModel` が通るのを確かめ、PR で glours に連絡する（PR のコメントでそう約束済み）。
 
 ## 2. `start -p` で任意の依存サービスが必須扱いになる
 
@@ -87,6 +95,13 @@
   - (c) 任意の改善: `pre_start.go` の `context.Background()` を `context.WithoutCancel(ctx)` に（トレースのスパンを保つため。ndeloof の提案）。
 - **衝突リスク**: `down` は #14081 の対象外（明記されている）。#14149 と #14155 が `down.go` を触っているが、別の箇所。
 - **やり方**: (b) を最優先にする。小さく、doc コメントとの食い違いという明確な根拠がある。
+- **進捗**（2026-10-09）:
+  - (b) は自分の PR [#14310](https://github.com/docker/compose/pull/14310) `fix(down): keep tearing down when listing retained hook containers fails`（OPEN、レビュー待ち）。
+    一覧取得の失敗を `logrus.Warnf` して処理を続けるようにし、単体テスト `TestDownHookContainerListFailureIsNonFatal` を追加。
+  - #14091 のレビューには、もう 1 つ別の残作業がある:
+    (d) フックコンテナは `VolumesFrom` でサービスのボリュームを参照しているのに、サービスコンテナより後に消しているので、サービスの `rm -v` で匿名ボリュームを回収し損ねるかもしれない。
+    フックを先に消す順序にするのが安全（レビューでも「to verify」扱い）。
+  - **次の一手**: #14310 のレビューに対応する。(a) と (d) は #14310 が片付いてから、それぞれ別の PR にする。
 
 ## 4. classic build の `--push` がプロジェクト全体をサービス数だけ push する
 

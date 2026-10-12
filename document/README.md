@@ -10,7 +10,9 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [intro.md](./concepts/intro.md) | 入門: そもそも Docker とは何か / Docker Compose とは何か（前提知識ゼロから読む用） |
 | [intro-qa.md](./concepts/intro-qa.md) | intro.md を読んで出た疑問の Q&A（FE とコンテナ、apple/container、M1、Linux 一強、OCI、DB） |
 | [container-tech.md](./concepts/container-tech.md) | コンテナ基盤技術（namespace / cgroup / capability / chroot / overlayfs、Immutable Infrastructure） |
+| [container-tech-qa.md](./concepts/container-tech-qa.md) | container-tech.md を読んで出た疑問の Q&A（マウントの仕組み、mnt / uts / ipc、cgroup の上限超過、ファイルシステムとは、virtiofs、ホスト名） |
 | [networking.md](./concepts/networking.md) | ネットワーキング（bridge / veth / iptables / DNS、ネットワークドライバ） |
+| [networking-qa.md](./concepts/networking-qa.md) | networking.md を読んで出た疑問の Q&A（ネットワークドライバ、パケットフィルタリング、NAT、IP アドレスの割り振り、MAC と IP のレイヤー） |
 | [oci.md](./concepts/oci.md) | OCI 標準（Image / Runtime / Distribution Spec、1.1 と 1.0）、イメージのレイヤーとレジストリ |
 | [docker-engine.md](./concepts/docker-engine.md) | Docker エンジン（dockerd / containerd / runc、Engine API、BuildKit / Buildx、ボリュームドライバ） |
 | [compose-concepts.md](./concepts/compose-concepts.md) | Compose 特有の概念（compose-spec、3 レイヤ、ラベル、収束処理、依存グラフ、watch、provider、コマンド一覧） |
