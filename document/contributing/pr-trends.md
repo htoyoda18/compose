@@ -211,7 +211,7 @@ glours はテンプレートの旧版に近い `**What I did**` / `**Related iss
 ### 補足: next-tasks の調査中に分かったプロセス上の注意
 
 - **`status/approved` ラベルはリポジトリに存在しない**。CONTRIBUTING.md は「AI を使った PR は `status/approved` の issue に紐づけること」と書いているが、
-  実際には付けようがない。だから「メンテナがレビューや issue で明示的に後押ししたもの」を選ぶのが現実的な代わりになる（[tracking/next-tasks.md](../tracking/next-tasks.md) の 1 と 3）。
+  実際には付けようがない。だから「メンテナがレビューや issue で明示的に後押ししたもの」を選ぶのが現実的な代わりになる（[tracking/next-tasks.md](../tracking/next-tasks.md) の `ensureModels` と `down` のフック後始末）。
 - **AI_POLICY.md:「AI の `Co-Authored-By` トレーラーは付けない」**。開示はコミットではなく PR の説明に書く。
   メンテナのコミットに Claude のトレーラーがあるのは「この規則は外部からのコントリビューションに適用する」という例外のため（§5-4）。
 - PR を開く前に `AI_AGENT_DISCLOSURE.md` を、自分でレビューした上で削除する（上の 7）。
