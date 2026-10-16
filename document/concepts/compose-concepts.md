@@ -1,6 +1,7 @@
 # Docker Compose 特有の概念
 
 compose.yaml の仕様からリソース管理・収束処理・各種機能まで、Compose 固有の概念。
+各機能が実際にどう振る舞うか（depends_on、作り直しの判定、ラベル、読み込み順など）は [compose-lifecycle.md](./compose-lifecycle.md)。
 「なぜ Compose が必要か」「宣言的とは何か」という入門的な話は [intro.md](./intro.md) を参照。
 
 ← [document 一覧](../README.md)
@@ -48,10 +49,11 @@ compose.yaml の仕様からリソース管理・収束処理・各種機能ま�
 - Compose のコアはコントローラ
 - モデルに書かれた「望ましい状態」と、Docker Engine 上の「実際の状態」を比較し、差分を埋める処理。
 - `up` 実行時、既存リソースを再利用するか作り直す（recreate）かを判定する中心ロジック。
-  - 既存があれば差分で recreate
+  - 既存のコンテナのラベル `config-hash` と、今の設定から計算したハッシュが違えば作り直す
   - 依存関係順に起動順も制御
-- config-hash と recreate の条件
 - Kubernetes のコントローラパターンに近い設計思想。
+- **今の実装は plan engine**: 「観測（ObservedState）→ 計画（reconcile が操作の DAG を作る）→ 実行（executor）」の 3 段。
+  2026 年に、それまでの convergence engine（`convergence.go`）から置き換わった。詳しくは [codebase/plan-engine.md](../codebase/plan-engine.md)。
 
 ## 依存関係グラフと起動順序制御
 

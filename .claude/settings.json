@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git ls-tree *)",
+      "Bash(awk -F/testdata '{print $1}')"
+    ]
+  }
+}

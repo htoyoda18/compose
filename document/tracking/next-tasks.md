@@ -30,7 +30,7 @@
 
 | 順 | タスク | 種類 | 検証 | 後押し | 衝突リスク | 規模 | 最初の一手 | 進捗 |
 | -: | ------ | ---- | ---- | ------ | ---------- | ---- | ---------- | ---- |
-| 1 | [CI の unit テストで毎回 1 件の偽の FAIL が出る](#1-ci-の-unit-テストで毎回-1-件の偽の-fail-が出る) | CI の衛生 | **テスト** | △ thaJeztah が本物の失敗と取り違えかけた | 低 | XS | そのまま PR | 未着手 |
+| 1 | [CI の unit テストで毎回 1 件の偽の FAIL が出る](#1-ci-の-unit-テストで毎回-1-件の偽の-fail-が出る) | CI の衛生 | **テスト** | △ thaJeztah が本物の失敗と取り違えかけた | 低 | XS | そのまま PR | 🟡 [#14351](https://github.com/docker/compose/pull/14351) レビュー待ち |
 | 2 | [`run` が依存サービスを作り直すと匿名ボリュームを引き継がない](#2-run-が依存サービスを作り直すと匿名ボリュームを引き継がない) | **データ消失**（未報告） | コード | △ 関連 issue #13769 | 低〜中 | XS（+e2e） | 実機で再現 → issue | 未着手 |
 | 3 | [watch の監視中に `.git/` が除外されない](#3-watch-の監視中に-git-が除外されない) | バグ（未報告） | **テスト** | △ glours が #14217 で同種の欠陥を指摘 | 中（`watch.go`） | XS | issue を立てる | 未着手 |
 | 4 | [bake のビルドが curl の書式指定などで失敗する](#4-bake-のビルドが-curl-の書式指定などで失敗する) | バグ（未報告） | **テスト** | ○ ndeloof が `${` を同じ形で直した前例 | 低 | S | issue を立てる | 未着手 |
@@ -42,7 +42,7 @@
 | 10 | [classic build の `--push` がプロジェクト全体をサービス数だけ push する](#10-classic-build-の---push-がプロジェクト全体をサービス数だけ-push-する) | バグ | コード | ○ エピック #14074 に 🐛 として記載 | 低 | S | issue を立てる（エピックから切り出す） | 未着手 |
 | 11 | [provider のメタデータ取得が呼び出し元の ctx を使わない](#11-provider-のメタデータ取得が呼び出し元の-ctx-を使わない) | バグ（小） | コード | ◎ ndeloof が「follow-up に回す」と明言 | 中（provider） | S | そのまま PR（レビューを引用） | 未着手 |
 | 12 | [`config -q` が一覧系フラグと組み合わせると出力する](#12-config--q-が一覧系フラグと組み合わせると出力する) | バグ | **実機** | ○ エピック #14074 E に記載 | 中（#14332, #14046） | S〜M | issue を立てる | 未着手 |
-| 13 | [`pkg/compose` のテストが Windows でコンパイルできない](#13-pkgcompose-のテストが-windows-でコンパイルできない) | テストのビルド | テスト | ◎ ndeloof がレビューで指摘 | **今は高**（#14296） | XS | #14296 のマージを待って PR | 未着手（待ち） |
+| 13 | [`pkg/compose` のテストが Windows でコンパイルできない](#13-pkgcompose-のテストが-windows-でコンパイルできない) | テストのビルド | テスト | ◎ ndeloof がレビューで指摘 | 中（#14305） | XS | upstream main で再確認して PR | 未着手（#14296 は 10-16 にマージ済み） |
 
 **「簡単で、インパクトが大きい」ものは 1〜4**:
 
@@ -81,7 +81,13 @@
 - **検証**: upstream/main のコピーで、CI と同じ `gotestsum -- -v -race -cover … -args -test.gocoverdir=` を流した。
   修正前は `1 failure`、修正後は `DONE 12 tests` で失敗 0。別の調査でも、`go test -json -v` で毎回再現した。
 - **衝突リスク**: 低。thaJeztah の [#14180](https://github.com/docker/compose/pull/14180) は `shortcut.go` を触るが、テストファイルは触らない。
-- **着手状況**: テスト名で検索しても、issue / PR は無い。
+- **着手状況**: テスト名で検索しても、issue / PR は無かった（10-16）。
+- **進捗**（2026-10-17）: 自分の PR [#14351](https://github.com/docker/compose/pull/14351) `test(formatter): keep escape sequences out of the go test output`（OPEN、REVIEW_REQUIRED）
+  - 変更は `shortcut_test.go` の 5 行だけ（`disableAnsi = true` と `t.Cleanup`、理由のコメント）。
+  - 確認したこと: gotestsum v1.13.0 で、`1 failure` → 失敗 0。`go test ./cmd/...` と `make lint` が通る。
+  - 該当する issue が無いので、PR 本文の Related issue には「テストだけの小さな修正である理由」を書いた。
+    CONTRIBUTING.md は AI を使った PR に承認済みの issue を求めているので、メンテナに issue を求められたら立てる。
+  - **次の一手**: レビューを待つ。fork からの PR なので、CI を動かすのにメンテナの承認が要る。承認後はブランチを触らない（#14310 の教訓）。
 
 ## 2. `run` が依存サービスを作り直すと匿名ボリュームを引き継がない
 
@@ -270,6 +276,8 @@
   - 前例として、外部からの同じ種類の修正 [#13683](https://github.com/docker/compose/pull/13683) がマージされている。
 - **衝突リスク**: **今は高い**。ndeloof の [#14296](https://github.com/docker/compose/pull/14296) と #14305 が、`start_test.go` を大きく書き換え中（+8/-286）。
   **#14296 のマージ後に**、そのときの main で状況を確かめてから出す（書き換えで直っている可能性もある）。
+- **更新（2026-10-17）**: #14296 は 10-16 にマージされた。upstream main（289d8a037）でも `start_test.go` の 1 行目は `//go:build !windows` のままで、直っていない。
+  残る衝突は draft の #14305（と統合ブランチ #14308）だけなので、衝突リスクは「中」に下げた。出す前に `GOOS=windows go vet ./pkg/compose/` で今も壊れていることを確かめる。
 
 ---
 
@@ -304,6 +312,7 @@
 | classic build のイメージに compose ラベルが付かない（`getImageBuildLabels` の呼び出し元は `build_bake.go` だけ） | エピック #14074 F。初回の 6 位から下げた。ndeloof は #14050 でこれを「separate pre-existing gap」と認めている。一方で、イメージに project/service ラベルが付くと、そこから `docker run` したコンテナまで compose 管理下に見える問題も挙げている。#14312 の「ラベルを増やしたくない」もあるので、方針を聞いてから |
 | `pull_refresh_after` が無視されているのに、設定ハッシュには含まれている（`hash.go`） | ndeloof が #14253 で「別の変更で判断すべき」と書いた。除外・実装・警告のどれにするか issue で聞く。10-16 時点で変化なし |
 | `wait --down-project` がヘルプの説明どおりに動かない（`pkg/compose/wait.go`） | ヘルプは「最初のコンテナが止まったら」だが、実際は全部が止まるまで待つ（`eg.Wait()`）。`statusCode` を複数の goroutine が書いていて、データ競合もある。挙動が変わるので合意が要る |
+| ライフサイクルの調査（10-17）で気付いた未確認の 3 件 | (1) plan の `StopContainer` は pre_stop を実行しないので、作り直しや scale down では pre_stop が動かない（`executor_ops.go:309-314`）。(2) 前景の `up` の Ctrl-C（`stopApplication`）は timeout を渡さないので、`up -t` が効かないかもしれない。(3) `--abort-on-container-exit` が、restart ポリシーで再起動中のコンテナが死んだときにも止めてしまうかもしれない。**どれも実機で未確認**。(1) は plan engine の領域なので、#14081 の issue で意図を聞くのが先。詳細は [compose-lifecycle.md](../concepts/compose-lifecycle.md) |
 | `.env` に書いた `COMPOSE_PROGRESS` が効かない（`cmd/compose/compose.go:234` がフラグの定義時に `os.Getenv` を読む） | ndeloof はこの制約を把握していて、同じ種類の問題を #14139 で直している最中。#14139 のマージ後に、その仕組みに乗せる |
 | `push --ignore-missing` で全部スキップされても何も分からない（`push.go:69-71`） | ndeloof が [#14341](https://github.com/docker/compose/pull/14341) の承認時に任意の提案として書いた（「a summary… or a warning when nothing was pushed」）。警告か集計かは設計判断。#14336 が `push.go` を触っている |
 | [#14313](https://github.com/docker/compose/issues/14313) bake の並列数の上限（buildx v0.38 の `--jobs` に `--parallel` を渡す） | S〜M。buildx のバージョン判定が要る。`service:` 形式の additional_contexts（buildx でいう linked target）があると、小さい上限値は buildx に拒否される。メンテナの反応はまだ無い |

@@ -2,6 +2,7 @@
 
 dockerd / containerd / runc の関係と、Engine API・BuildKit・ボリュームなど Docker エンジンが提供する機能。
 全体像（`docker CLI → dockerd → containerd → runc`）は [intro.md #動かすときの構成要素](./intro.md#動かすときの構成要素) を参照。
+読んでいて出た疑問の Q&A は [docker-engine-qa.md](./docker-engine-qa.md)。
 
 ← [document 一覧](../README.md)
 
@@ -31,7 +32,7 @@ dockerd / containerd / runc の関係と、Engine API・BuildKit・ボリュー�
 | --- | --- |
 | `dockerd` | Docker としての高レベル機能（API, イメージ, ネットワーク, ボリューム, ログ） |
 | `containerd` | コンテナのライフサイクル管理（作成/開始/停止/監視）、イメージの実体管理。常駐デーモン。containerd-shim を介して各コンテナプロセスを監視する |
-| `containerd-shim` | コンテナ 1 つごとに常駐し、親デーモンとコンテナを切り離す。これにより dockerd/containerd を再起動しても稼働中コンテナは死なない |
+| `containerd-shim` | コンテナ 1 つごとに常駐し、親デーモンとコンテナを切り離す。これにより containerd を再起動しても稼働中コンテナは死なない（dockerd の再起動でも残すには `live-restore` の設定が要る） |
 | `runc` | 最終的に namespace / cgroup を設定してプロセスを起動する。OCI Runtime Spec の実装（低レベルランタイム）。起動したら終了する短命プロセス |
 
 つまり `docker run` は

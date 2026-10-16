@@ -8,28 +8,43 @@ CLI 層の詳細（cobra・トレーシング・プラグイン版/スタンド�
 
 ## ディレクトリ構造
 
+`upstream/main` 289d8a037（2026-10-16）時点。主なものだけ。
+
 ```
 compose/
 ├── cmd/                   # コマンドライン実装
 │   ├── compose/           # Composeコマンド実装（45以上のコマンド）
 │   ├── compatibility/     # v1互換性レイヤー
 │   ├── display/           # UI表示ロジック
+│   ├── formatter/         # 出力の整形、ANSI、ナビゲーションメニュー（キー操作）
+│   ├── prompt/            # 対話的な確認
+│   ├── cmdtrace/          # コマンド単位のトレーシング
 │   └── main.go            # エントリーポイント
 │
-├── pkg/                   # コアパッケージ
-│   ├── api/               # APIインターフェース定義
-│   ├── compose/           # メインCompose実装
+├── pkg/                   # コアパッケージ（外部から SDK として使える）
+│   ├── api/               # APIインターフェース定義、ラベル定数
+│   ├── compose/           # メインCompose実装（plan engine を含む）
 │   ├── watch/             # ファイル監視機能
 │   ├── remote/            # リモートリソース（Git、OCI）
-│   └── e2e/               # E2Eテスト（約50ファイル）
+│   ├── bridge/            # compose.yaml を別の形式に変換する（`compose bridge convert`）
+│   ├── dryrun/            # --dry-run 用の、何もしない API クライアント
+│   ├── mocks/             # テスト用の mock（moby の API クライアントなど）
+│   └── e2e/               # E2Eテスト（Scenario DSL）
 │
 ├── internal/              # 内部パッケージ
 │   ├── desktop/           # Docker Desktop統合
 │   ├── tracing/           # 分散トレーシング
-│   └── oci/               # OCIレジストリ操作
+│   ├── oci/ registry/     # OCIレジストリ操作
+│   ├── provider/          # provider サービス（プラグイン）の実行。10-15 に pkg/compose から移動
+│   ├── relay/             # provider の relay コンテナ
+│   ├── inspect/           # events / ls / port / inspect の表示
+│   ├── projectloader/     # プロジェクトの読み込み
+│   ├── locker/ pidfile/   # 同時実行の排他
+│   └── progress/ memnet/ naming/ paths/ sync/ experimental/
 │
+├── relay/                 # relay の実行ファイル
 └── docs/                  # ドキュメント
-    ├── reference/         # コマンドリファレンス（95+ファイル）
+    ├── reference/         # コマンドリファレンス（cobra から生成）
     └── examples/          # サンプルコード
 ```
 
@@ -66,9 +81,14 @@ Docker Engine API
 
 **pkg/compose/compose.go**: composeService 実装
 
-- Docker Engine API とのやり取り
-- リソースの収束処理
-- 進捗トラッキング
+- Docker Engine API とのやり取り（`apiClient()`）
+- オプション（`WithMaxConcurrency`、`WithDryRun` など）とイベントの送り先
+- ラベルからプロジェクトを組み立て直す `projectFromName`
+
+**pkg/compose の plan engine**（`plan.go`、`reconcile.go`、`executor*.go`、`observed_state.go`）: リソースの収束処理
+
+- 「観測 → 計画 → 実行」の 3 段。詳しくは [plan-engine.md](./plan-engine.md)
+- `stop` / `restart` / `down` / `kill` は、まだ古い仕組み（`dependencies.go` の `InDependencyOrder`）で動いている
 
 **pkg/watch/**: ファイル監視機能（OS ごとの実装は [concepts/compose-concepts.md #watch 機能](../concepts/compose-concepts.md#watch-機能ファイル監視同期)）
 

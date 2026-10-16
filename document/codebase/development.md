@@ -49,6 +49,8 @@ make e2e-compose-standalone
 make e2e
 ```
 
+テストの書き方（gotest.tools、gomock、Scenario DSL）と CI の詳細は [testing.md](./testing.md)。
+
 ### E2E テスト（Scenario DSL）
 
 - `pkg/e2e/scenario.go` の `NewScenario` を使い、「意図・インライン compose 定義・コマンドと期待結果のステップ」を宣言的に書く DSL。

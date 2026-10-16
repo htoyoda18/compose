@@ -2,6 +2,7 @@
 
 コンテナイメージの形式・起動方法・配布方法を定める標準規格と、それに沿ったイメージ／レジストリの仕組み。
 OCI の 3 仕様の短い要約は [intro-qa.md #5](./intro-qa.md#5-oci-標準の具体的な中身) にもある。
+読んでいて出た疑問の Q&A は [oci-qa.md](./oci-qa.md)。
 このリポジトリでの実装（`internal/oci`, `internal/registry`）は [codebase/internal.md](../codebase/internal.md) を参照。
 
 ← [document 一覧](../README.md)
@@ -15,7 +16,7 @@ OCI の 3 仕様の短い要約は [intro-qa.md #5](./intro-qa.md#5-oci-標準�
 
 - コンテナイメージのフォーマット（レイヤー構成・manifest・config）を定義する仕様。
 - Docker イメージもこの仕様に準拠しており、他のツール（Podman 等）とも互換性がある。
-- manifest がレイヤーの digest リストと実行時の設定情報を持つ。
+- manifest がレイヤーの digest リストと、実行時の設定情報（config）への参照を持つ。
 
 ### OCI Runtime Spec
 
@@ -44,7 +45,7 @@ OCI の 3 仕様の短い要約は [intro-qa.md #5](./intro-qa.md#5-oci-標準�
 
 - Docker イメージは複数の読み取り専用レイヤー（差分ファイルシステム）の重ね合わせで構成される。
 - 各レイヤーは digest で一意に識別される content-addressable なデータで、複数イメージ間で共有・再利用される。
-- manifest はレイヤーの並び順や実行時設定（entrypoint, env 等）をまとめたメタデータで、イメージの pull/push 単位となる。
+- manifest はレイヤーの並び順と、実行時設定（entrypoint, env 等）を持つ config への参照をまとめたメタデータで、イメージの pull/push 単位となる。
 - レイヤーの重ね合わせを実現する overlayfs は [container-tech.md](./container-tech.md) を参照。
 
 ## レジストリと pull/push
