@@ -106,6 +106,16 @@ func TestPreStartHookInError(t *testing.T) {
 			ServiceState("sample", "created"))
 }
 
+// The output of a failing hook is what tells why it failed: it must reach the
+// error, which is built from the log stream opened on the running hook.
+func TestPreStartHookFailureShowsOutput(t *testing.T) {
+	NewScenario(t, "a failing pre_start hook must report what it printed").
+		Step("up fails, and the error carries the hook's output",
+			ComposeCmd("up", "-d").MayFail(),
+			ExitCode(1),
+			OutputContains("hook-diagnostic-marker"))
+}
+
 // A retained runner from a failed run must not block the next one: it is a
 // stale hook container the reconciler has to observe and purge before
 // creating a fresh one under the same deterministic name, or the second up
@@ -292,6 +302,17 @@ func TestPreStartHookVolumesMerge(t *testing.T) {
 		Step("the hook combined the inherited mount's content with its own write",
 			ComposeCmd("exec", "app", "cat", "/data/init.txt"),
 			OutputContains("saw-config"))
+}
+
+// The environment of a pre_start hook is the service's merged with its own:
+// env_file entries must be loaded into the hook container, whether inherited
+// from the service or declared by the hook (docker/compose#14287). Each hook
+// asserts the variables it must receive and fails the up otherwise.
+func TestPreStartHookEnvFile(t *testing.T) {
+	NewScenario(t, "pre_start hooks must receive the service's env_file and environment, completed by their own").
+		Step("up succeeds: both hooks found every variable they expect",
+			ComposeCmd("up", "-d", "--wait").Within(60*time.Second),
+			ServiceState("app", "running"))
 }
 
 // A service using volumes_from inherits it into its pre_start hook (full

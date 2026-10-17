@@ -24,10 +24,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/cli/cli/config/configfile"
+	clitypes "github.com/docker/cli/cli/config/types"
 	"github.com/docker/cli/cli/flags"
 	"github.com/docker/cli/cli/streams"
 	"github.com/moby/moby/api/types/container"
@@ -37,6 +39,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/docker/compose/v5/internal/registry"
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/docker/compose/v5/pkg/dryrun"
 )
@@ -68,7 +71,13 @@ func NewComposeService(dockerCli command.Cli, options ...Option) (api.Compose, e
 		dockerCli:      dockerCli,
 		maxConcurrency: -1,
 		dryRun:         false,
+
+		logStreamDrainTimeout: defaultLogStreamDrainTimeout,
 	}
+	// Look the config file up lazily: WithDryRun replaces s.dockerCli.
+	s.auth = registry.NewDesktopAuthProvider(registry.AuthProviderFunc(func(registryHostname string) (clitypes.AuthConfig, error) {
+		return s.configFile().GetAuthConfig(registryHostname)
+	}))
 	for _, option := range options {
 		if err := option(s); err != nil {
 			return nil, err
@@ -275,6 +284,8 @@ type composeService struct {
 	dockerCli command.Cli
 	// prompt is used to interact with user and confirm actions
 	prompt Prompt
+	// navigationMenu creates the interactive menu of a foreground `up`, if any
+	navigationMenu NavigationMenuFactory
 	// eventBus collects tasks execution events
 	events api.EventProcessor
 
@@ -288,7 +299,20 @@ type composeService struct {
 	maxConcurrency int
 	dryRun         bool
 
+	auth registry.AuthProvider
+
 	runtimeAPIVersion runtimeVersionCache
+
+	// swarm caches the daemon's swarm mode, see isSwarmEnabled.
+	swarm swarmState
+
+	// pluginMu guards the project's services while concurrent provider runs
+	// inject their variables into the services depending on them, see runPlugin.
+	pluginMu sync.Mutex
+
+	// logStreamDrainTimeout bounds the shutdown drain of re-attached log
+	// streams, see drainTimeout.
+	logStreamDrainTimeout time.Duration
 }
 
 // Close releases any connections/resources held by the underlying clients.
@@ -309,6 +333,15 @@ func (s *composeService) apiClient() client.APIClient {
 
 func (s *composeService) configFile() *configfile.ConfigFile {
 	return s.dockerCli.ConfigFile()
+}
+
+// authProvider uses the config file only for services not built by
+// NewComposeService, so unit tests never reach Docker Desktop.
+func (s *composeService) authProvider() registry.AuthProvider {
+	if s.auth != nil {
+		return s.auth
+	}
+	return s.configFile()
 }
 
 // getContextInfo returns the context info - either custom override or dockerCli adapter
@@ -558,26 +591,30 @@ func (s *composeService) actualNetworks(ctx context.Context, projectName string)
 	return actual, nil
 }
 
-var swarmEnabled = struct {
+// swarmState caches whether the daemon this service talks to runs in swarm
+// mode. The answer belongs to the daemon behind the service's client, so it is
+// held per composeService rather than shared by every instance in the process.
+type swarmState struct {
 	once sync.Once
 	val  bool
 	err  error
-}{}
+}
 
 func (s *composeService) isSwarmEnabled(ctx context.Context) (bool, error) {
-	swarmEnabled.once.Do(func() {
+	st := &s.swarm
+	st.once.Do(func() {
 		res, err := s.apiClient().Info(ctx, client.InfoOptions{})
 		if err != nil {
-			swarmEnabled.err = err
+			st.err = err
 		}
 		switch res.Info.Swarm.LocalNodeState {
 		case swarm.LocalNodeStateInactive, swarm.LocalNodeStateLocked:
-			swarmEnabled.val = false
+			st.val = false
 		default:
-			swarmEnabled.val = true
+			st.val = true
 		}
 	})
-	return swarmEnabled.val, swarmEnabled.err
+	return st.val, st.err
 }
 
 // runtimeVersionCache caches a version string after a successful lookup.

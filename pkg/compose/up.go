@@ -31,12 +31,10 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/containerd/errdefs"
 	"github.com/docker/cli/cli"
-	"github.com/eiannone/keyboard"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/docker/compose/v5/cmd/formatter"
 	"github.com/docker/compose/v5/internal/desktop"
 	"github.com/docker/compose/v5/internal/tracing"
 	"github.com/docker/compose/v5/pkg/api"
@@ -44,14 +42,10 @@ import (
 
 func (s *composeService) Up(ctx context.Context, project *types.Project, options api.UpOptions) error {
 	err := Run(ctx, tracing.SpanWrapFunc("project/up", tracing.ProjectOptions(ctx, project), func(ctx context.Context) error {
-		err := s.create(ctx, project, options.Create)
-		if err != nil {
-			return err
-		}
 		if options.Start.Attach == nil {
-			return s.start(ctx, project.Name, options.Start, nil)
+			return s.upDetached(ctx, project, options)
 		}
-		return nil
+		return s.create(ctx, project, options.Create)
 	}), "up", s.events)
 	if err != nil {
 		return err
@@ -67,6 +61,95 @@ func (s *composeService) Up(ctx context.Context, project *types.Project, options
 	return s.runInteractiveUp(ctx, project, options)
 }
 
+// upDetached runs detached `up`'s Create and Start phases as a single plan:
+// the semantic switchover from create() + start() -- two separate daemon
+// snapshots, the second blind to what the first just did -- to one
+// preparePlan/executePlan pass covering both phases (epic #14081, lot 2).
+// Interactive up keeps the create()+start() sequence for now: its own
+// create/start phase boundary (attach/printer/monitor setup in between) is a
+// separate, riskier item of the same lot.
+func (s *composeService) upDetached(ctx context.Context, project *types.Project, options api.UpOptions) error {
+	project, observed, plan, err := s.preparePlan(ctx, project, options.Create, ScopeCreateStart)
+	if err != nil {
+		return err
+	}
+
+	// Must run against the pre-execution snapshot: observed only labels a
+	// container Running if it already was one before this plan touched
+	// anything, exactly what "the plan won't touch it" is supposed to mean.
+	emitRunningEvents(project, observed, plan, s.events)
+
+	// The plan's own OpWaitCondition nodes (service_healthy /
+	// service_completed_successfully dependency waits) block with no timeout
+	// of their own -- unlike start()'s per-dependency waitDependencies call,
+	// which already threads WaitTimeout through every wait unconditionally
+	// (InDependencyOrder passes it to startService regardless of
+	// options.Wait -- --wait-timeout alone, with no --wait, is a legal CLI
+	// combination nothing rejects). exec.waitTimeout bounds exactly those
+	// nodes (see executeNode), each with its OWN fresh window starting when
+	// that wait begins -- not a single shared budget counted down from
+	// before the plan even started. Sharing one absolute deadline across
+	// create/start/hook work and every wait would let slow, unrelated work
+	// alone exhaust it, failing an otherwise healthy deployment as "not
+	// healthy" with no wait ever actually timing out -- start()'s real,
+	// per-wait-independent behavior never had that failure mode.
+	exec := s.newPlanExecutor(project, observed, nil)
+	exec.waitTimeout = options.Start.WaitTimeout
+
+	if err := exec.run(ctx, plan); err != nil {
+		return translateWaitTimeout(err)
+	}
+
+	if !options.Start.Wait {
+		return nil
+	}
+
+	// The plan may have created or recreated containers: this verification
+	// needs their current IDs, which the pre-execution observed snapshot
+	// above doesn't have for a container that didn't exist yet at
+	// observation time. The listing runs on the caller's context, before the
+	// --wait-timeout window opens, so daemon-listing latency never eats into
+	// the budget the readiness polling is owed (any deadline it hits is the
+	// caller's own, unrelated to --wait-timeout, and is returned as such).
+	containers, err := s.getContainers(ctx, project.Name, oneOffExclude, true)
+	if err != nil {
+		return err
+	}
+
+	// The check then opens its own fresh WaitTimeout window, same as every
+	// OpWaitCondition node above and start()'s own final --wait check did --
+	// not whatever's left of a shared budget, which unrelated plan work could
+	// already have exhausted with no wait ever at risk.
+	//
+	// origCtx is kept so the DeadlineExceeded check below can tell this fresh
+	// window expiring (origCtx still fine) apart from origCtx's own,
+	// independent deadline propagating through the derived one (origCtx
+	// already done): a parent deadline firing first makes the derived
+	// context's Err() report DeadlineExceeded too, inherited from the
+	// parent, even though this window's own timer never fired.
+	origCtx := ctx
+	if options.Start.WaitTimeout > 0 {
+		withTimeout, cancel := context.WithTimeout(ctx, options.Start.WaitTimeout)
+		defer cancel()
+		ctx = withTimeout
+	}
+
+	depends := types.DependsOnConfig{}
+	for _, svc := range project.Services {
+		depends[svc.Name] = types.ServiceDependency{
+			Condition: getDependencyCondition(svc, project),
+			Required:  true,
+		}
+	}
+	if err := s.waitDependencies(ctx, project, project.Name, depends, containers, 0); err != nil {
+		if options.Start.WaitTimeout > 0 && origCtx.Err() == nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("application not healthy after %s", options.Start.WaitTimeout)
+		}
+		return err
+	}
+	return nil
+}
+
 // upSession carries the state shared between the goroutines driving an
 // interactive `compose up` once services are created: the errgroup running
 // them, the collected errors, and the application exit status.
@@ -79,7 +162,7 @@ type upSession struct {
 	// drain them before tearing the context down — see the monitor wrapper.
 	logStreams sync.WaitGroup
 	watcher    *Watcher
-	menu       *formatter.LogKeyboard
+	menu       NavigationMenu
 	globalCtx  context.Context
 	cancel     context.CancelFunc
 	// logOpenLimiter bounds concurrent log-attach opens from
@@ -105,12 +188,12 @@ func (s *composeService) runInteractiveUp(ctx context.Context, project *types.Pr
 	defer signal.Stop(signalChan)
 
 	logConsumer := options.Start.Attach
-	navigationMenu, kEvents, err := s.setupNavigationMenu(ctx, &options, signalChan)
+	navigationMenu, err := s.setupNavigationMenu(ctx, &options, signalChan)
 	if err != nil {
 		return err
 	}
 	if navigationMenu != nil {
-		defer keyboard.Close() //nolint:errcheck
+		defer navigationMenu.Close() //nolint:errcheck
 		logConsumer = navigationMenu.Decorate(logConsumer)
 	}
 
@@ -145,8 +228,14 @@ func (s *composeService) runInteractiveUp(ctx context.Context, project *types.Pr
 	}
 
 	u.eg.Go(func() error {
-		return u.runEventLoop(ctx, kEvents)
+		return u.runEventLoop(ctx)
 	})
+	if navigationMenu != nil {
+		u.eg.Go(func() error {
+			navigationMenu.Run(globalCtx, project, options)
+			return nil
+		})
+	}
 
 	if options.Start.Watch && watcher != nil {
 		if err := watcher.Start(globalCtx); err != nil {
@@ -208,7 +297,7 @@ func (s *composeService) runInteractiveUp(ctx context.Context, project *types.Pr
 		}()
 		select {
 		case <-drained:
-		case <-time.After(logStreamDrainTimeout):
+		case <-time.After(u.drainTimeout()):
 		case <-globalCtx.Done():
 		}
 		// cancel the global context to terminate signal-handler goroutines
@@ -238,26 +327,35 @@ func (s *composeService) runInteractiveUp(ctx context.Context, project *types.Pr
 }
 
 // setupNavigationMenu initializes the interactive keyboard menu when enabled.
-// It returns a nil menu when the menu is disabled, or when the keyboard can't
-// be grabbed — then disabling the option.
-func (s *composeService) setupNavigationMenu(ctx context.Context, options *api.UpOptions, signalChan chan os.Signal) (*formatter.LogKeyboard, <-chan keyboard.KeyEvent, error) {
+// It returns a nil menu when the menu is disabled, when no menu implementation
+// was configured (WithNavigationMenu), or when the keyboard can't be grabbed —
+// then disabling the option.
+func (s *composeService) setupNavigationMenu(ctx context.Context, options *api.UpOptions, signalChan chan os.Signal) (NavigationMenu, error) {
 	if !options.Start.NavigationMenu {
-		return nil, nil, nil
+		return nil, nil
 	}
-	kEvents, err := keyboard.GetKeys(100)
-	if err != nil {
-		logrus.Warnf("could not start menu, an error occurred while starting: %v", err)
+	if s.navigationMenu == nil {
+		logrus.Warn("no navigation menu implementation configured (see WithNavigationMenu), disabling the option")
 		options.Start.NavigationMenu = false
-		return nil, nil, nil
+		return nil, nil
 	}
 	isDockerDesktopActive, err := s.isDesktopIntegrationActive(ctx)
 	if err != nil {
-		_ = keyboard.Close()
-		return nil, nil, err
+		return nil, err
 	}
 	isLogsViewEnabled := s.isDesktopFeatureActive(ctx, desktop.FeatureLogsTab)
+	menu := s.navigationMenu(isDockerDesktopActive, isLogsViewEnabled, signalChan)
+	if menu == nil {
+		options.Start.NavigationMenu = false
+		return nil, nil
+	}
+	if err := menu.Open(); err != nil {
+		logrus.Warnf("could not start menu, an error occurred while starting: %v", err)
+		options.Start.NavigationMenu = false
+		return nil, nil
+	}
 	tracing.KeyboardMetrics(ctx, options.Start.NavigationMenu, isDockerDesktopActive, isLogsViewEnabled)
-	return formatter.NewKeyboardManager(isDockerDesktopActive, isLogsViewEnabled, signalChan), kEvents, nil
+	return menu, nil
 }
 
 // appendErr records err for the final report, unless it is nothing more than
@@ -279,10 +377,10 @@ func (u *upSession) appendErr(err error) {
 	u.mu.Unlock()
 }
 
-// runEventLoop reacts to cancellation, SIGINT/SIGTERM and keyboard input until
+// runEventLoop reacts to cancellation and SIGINT/SIGTERM until
 // the application terminates: a first interruption triggers a graceful stop,
 // a second one kills the services.
-func (u *upSession) runEventLoop(ctx context.Context, kEvents <-chan keyboard.KeyEvent) error {
+func (u *upSession) runEventLoop(ctx context.Context) error {
 	first := true
 	gracefulTeardown := func() {
 		first = false
@@ -306,14 +404,14 @@ func (u *upSession) runEventLoop(ctx context.Context, kEvents <-chan keyboard.Ke
 			}
 		case <-u.signalChan:
 			if first {
-				_ = keyboard.Close()
+				if u.menu != nil {
+					_ = u.menu.Close()
+				}
 				gracefulTeardown()
 				break
 			}
 			u.killApplication()
 			return nil
-		case event := <-kEvents:
-			u.menu.HandleKeyEvents(u.globalCtx, event, u.project, u.options)
 		}
 	}
 }
@@ -426,17 +524,26 @@ func (u *upSession) captureExitCodeFrom() api.ContainerEventListener {
 	}
 }
 
+// defaultLogStreamDrainTimeout is the default bound on the shutdown drain of the
+// streams opened by followStartedContainers: EOF is guaranteed once the containers exited, the bound only protects against a
+// wedged daemon holding the connection open. It is a composeService field so
+// tests can shrink it without touching package state.
+const defaultLogStreamDrainTimeout = 5 * time.Second
+
+// drainTimeout returns the configured drain bound, falling back to the default
+// for a composeService not built by NewComposeService.
+func (s *composeService) drainTimeout() time.Duration {
+	if s.logStreamDrainTimeout > 0 {
+		return s.logStreamDrainTimeout
+	}
+	return defaultLogStreamDrainTimeout
+}
+
 // followStartedContainers streams logs of containers (re)started after `up`,
 // so they are followed like the initially attached ones.
-//
-// logStreamDrainTimeout bounds the shutdown drain of these streams: EOF is
-// guaranteed once the containers exited, the bound only protects against a
-// wedged daemon holding the connection open. A variable so tests can shrink
-// it.
-var logStreamDrainTimeout = 5 * time.Second
-
 func (u *upSession) followStartedContainers(attached []string) api.ContainerEventListener {
 	runEnds := newRunEndTracker()
+	cursors := newLogCursors()
 	return func(event api.ContainerEvent) {
 		runEnds.Observe(event)
 		if !shouldFollowStartEvent(event, attached, u.options.Start.AttachTo) {
@@ -446,18 +553,24 @@ func (u *upSession) followStartedContainers(attached []string) api.ContainerEven
 		// later, a fast run's own exit could already be recorded and the log
 		// window would drop the whole run.
 		since := runEnds.Since(event.ID)
+		// Queued here, in event order, for the same reason.
+		turn := cursors.enter(event.ID)
 		// counted before the goroutine starts so the shutdown drain can never
 		// miss a stream dispatched but not yet running
 		u.logStreams.Add(1)
 		u.eg.Go(func() error {
 			defer u.logStreams.Done()
-			u.appendErr(u.streamContainerLogs(event, since))
+			defer turn.end()
+			u.appendErr(u.streamContainerLogs(turn, event, since))
 			return nil
 		})
 	}
 }
 
-func (u *upSession) streamContainerLogs(event api.ContainerEvent, since string) error {
+func (u *upSession) streamContainerLogs(turn *logTurn, event api.ContainerEvent, since string) error {
+	if err := turn.wait(u.globalCtx); err != nil {
+		return err
+	}
 	ctr, err := u.inspectWithSlot(u.globalCtx, u.logOpenLimiter, event.ID)
 	if err != nil {
 		return err
@@ -469,10 +582,11 @@ func (u *upSession) streamContainerLogs(event api.ContainerEvent, since string) 
 	err = u.doLogContainer(u.globalCtx, u.logOpenLimiter, u.options.Start.Attach, event.Source, ctr, api.LogOptions{
 		Follow: true,
 		Since:  since,
-	})
+	}, turn.cursor)
 	if errdefs.IsNotImplemented(err) {
 		// container may be configured with logging_driver: none
 		// as container already started, we might miss the very first logs. But still better than none
+		turn.end() // nothing was relayed, and the attach lasts as long as the run
 		return u.doAttachContainer(u.globalCtx, event.Service, event.ID, event.Source, u.printer.HandleEvent)
 	}
 	return err
