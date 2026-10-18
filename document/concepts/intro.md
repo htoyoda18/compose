@@ -197,26 +197,15 @@ docker compose down    # まとめて停止・削除
 
 ### 命令的 (imperative) から宣言的 (declarative) へ
 
-これが Compose の本質。
-
-- `docker run` は**命令的**: 「何をするか」を手順として並べる
-- `compose.yaml` は**宣言的**: 「どうあってほしいか（望ましい状態）」を書く
-
-Compose は「YAML に書かれた望ましい状態」と「Docker Engine の実際の状態」を比較し、
-**差分だけを埋める**ように動く。だから `docker compose up` は何度打っても安全で、
-すでに正しく動いているコンテナはそのまま残り、定義が変わったものだけ作り直される
-（recreate）。この差分埋め＝**収束処理 (convergence)** が Compose の中核ロジック。
+`docker run` は「何をするか」を並べる命令的なやり方、`compose.yaml` は「どうあってほしいか」を書く宣言的なやり方。
+Compose は YAML の望ましい状態と Docker Engine の実際の状態を比べ、**差分だけを埋める**(収束処理)。
 
 ### プロジェクトという単位
 
-Compose は「サービス集合 + 付随するネットワーク/ボリューム」の束を
-**プロジェクト (project)** として扱う。プロジェクト名はデフォルトでディレクトリ名。
+Compose はサービス集合と付随するネットワーク/ボリュームの束を**プロジェクト**として扱う(名前はデフォルトでディレクトリ名)。
+自前の状態データベースは持たず、作ったリソースに貼った**ラベル**で自分の管理対象を見つけ出す。
 
-Compose は自前の状態データベースを持たない。代わりに、作成したリソースすべてに
-`com.docker.compose.project` などの**ラベル**を付け、次回はラベルで絞り込んで
-「自分が管理しているリソース」を見つけ出す。Docker Engine 自体が状態の保管場所になっている。
-
-→ 詳細は [compose-concepts.md](./compose-concepts.md)
+→ ラベルと差分埋めがどう動くかは、例で追った [how-compose-works.md](./how-compose-works.md) を参照
 
 ### Docker Compose が提供する主なもの
 

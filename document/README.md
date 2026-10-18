@@ -5,6 +5,8 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 
 ディレクトリ・ファイル単位のコードノート(`note.md` / `xxx.go.md`)は、リポジトリ直下の [note.md](../note.md) から辿る。
 
+**読む順番は [roadmap.md](./roadmap.md) を参照**(概念・コード解説・コードノートを段階ごとに混ぜて並べている)。
+
 ## concepts/ — 一般的な概念（このリポジトリに依存しない）
 
 | ファイル | 内容 |
@@ -19,6 +21,7 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [oci-qa.md](./concepts/oci-qa.md) | oci.md を読んで出た疑問の Q&A（manifest、digest、コンテナの起動の流れ、Dockerfile とレイヤー） |
 | [docker-engine.md](./concepts/docker-engine.md) | Docker エンジン（dockerd / containerd / runc、Engine API、BuildKit / Buildx、ボリュームドライバ） |
 | [docker-engine-qa.md](./concepts/docker-engine-qa.md) | docker-engine.md を読んで出た疑問の Q&A（dockerd の居場所、状態の保存先、shim、ボリュームの実体、ポートフォワード、BuildKit、rootless、セキュリティ） |
+| [how-compose-works.md](./concepts/how-compose-works.md) | Compose が動く仕組み（web + db の例で、ラベルによる現状把握と差分埋めを初回 up / 再 up / down の順に追う） |
 | [compose-concepts.md](./concepts/compose-concepts.md) | Compose 特有の概念（compose-spec、3 レイヤ、ラベル、収束処理、依存グラフ、watch、provider、コマンド一覧） |
 | [compose-lifecycle.md](./concepts/compose-lifecycle.md) | Compose の意味論（depends_on、healthcheck、フック、作り直しの判定と config hash、ラベル、読み込み順と環境変数、ボリューム、ネットワーク、run、停止と終了コード） |
 | [go.md](./concepts/go.md) | Go 言語（goroutine / channel / errgroup / context / interface / error wrapping / modules） |
@@ -55,41 +58,3 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [issues.md](./tracking/issues.md) | 個別 issue の調査状況 |
 | [todo.md](./tracking/todo.md) | リポジトリ内 TODO コメントの調査状況 |
 | [fixme.md](./tracking/fixme.md) | リポジトリ内 FIXME コメントの調査状況（随時再スキャンして更新） |
-
-## 学習ロードマップ（読む順）
-
-上から順に読む。（Q&A）は直前のファイルを読んで疑問が出たときに開けばよい。
-
-1. [concepts/intro.md](./concepts/intro.md)
-   - （Q&A）[concepts/intro-qa.md](./concepts/intro-qa.md)
-2. [concepts/container-tech.md](./concepts/container-tech.md)
-   - （Q&A）[concepts/container-tech-qa.md](./concepts/container-tech-qa.md)
-3. [concepts/networking.md](./concepts/networking.md)
-   - （Q&A）[concepts/networking-qa.md](./concepts/networking-qa.md)
-4. [concepts/oci.md](./concepts/oci.md)
-   - （Q&A）[concepts/oci-qa.md](./concepts/oci-qa.md)
-5. [concepts/docker-engine.md](./concepts/docker-engine.md)
-   - （Q&A）[concepts/docker-engine-qa.md](./concepts/docker-engine-qa.md)
-6. [concepts/compose-concepts.md](./concepts/compose-concepts.md)
-7. [concepts/compose-lifecycle.md](./concepts/compose-lifecycle.md)
-8. [concepts/go.md](./concepts/go.md)
-   - （Q&A）[concepts/go-qa.md](./concepts/go-qa.md)
-9. [codebase/overview.md](./codebase/overview.md)
-10. [codebase/architecture.md](./codebase/architecture.md)
-11. [codebase/flow.md](./codebase/flow.md)
-12. [codebase/cli.md](./codebase/cli.md)
-13. [codebase/plan-engine.md](./codebase/plan-engine.md)
-14. [codebase/internal.md](./codebase/internal.md)
-15. [codebase/reading-guide.md](./codebase/reading-guide.md)
-16. [codebase/development.md](./codebase/development.md)
-17. [codebase/testing.md](./codebase/testing.md)
-18. [pkg/e2e/SCENARIO.md](../pkg/e2e/SCENARIO.md)
-19. [contributing/README.md](./contributing/README.md)
-20. [CONTRIBUTING.md](../CONTRIBUTING.md) と [AI_POLICY.md](../AI_POLICY.md)
-21. [contributing/pr-trends.md](./contributing/pr-trends.md)
-22. [contributing/pr-review-patterns.md](./contributing/pr-review-patterns.md)
-23. [contributing/checklist.md](./contributing/checklist.md)
-24. [tracking/next-tasks.md](./tracking/next-tasks.md)
-25. [tracking/issues.md](./tracking/issues.md)
-26. [tracking/todo.md](./tracking/todo.md)
-27. [tracking/fixme.md](./tracking/fixme.md)

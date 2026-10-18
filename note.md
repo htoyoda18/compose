@@ -6,7 +6,7 @@ Compose の実装をディレクトリ・ファイル単位で言語化したノ
 各ディレクトリの `note.md` が子ディレクトリの `note.md` / ファイルの `xxx.go.md` へリンクし、
 各ノート先頭のパンくずから上の階層へ戻れる。ノート未作成の要素はリンクなしのプレーンテキストで書く。
 
-概念・全体設計などの横断的な解説は [document/README.md](document/README.md) を参照。
+概念・全体設計などの横断的な解説は [document/README.md](document/README.md)、読む順番は [document/roadmap.md](document/roadmap.md) を参照。
 コマンドを打ってからコンテナが起動するまでの処理の流れは [document/codebase/flow.md](document/codebase/flow.md) を参照。
 
 ## 依存関係
