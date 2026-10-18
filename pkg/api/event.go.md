@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / [api](note.md) / event.go
+
 - 責務
   - イベント処理とステータス管理
 - EventStatus

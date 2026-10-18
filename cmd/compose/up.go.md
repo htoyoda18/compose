@@ -1,3 +1,5 @@
+[root](../../note.md) / [cmd](../note.md) / [compose](note.md) / up.go
+
 - composeOptions
   - Compose プロジェクトを扱うためのオプション
 - upOptions

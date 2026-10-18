@@ -1,3 +1,5 @@
+[root](../note.md) / relay
+
 - relay/(独立したGoモジュール。`go.mod`/`Dockerfile`を持ち`pkg/compose/relay.go`とは別ビルド)
   - `compose-relay`。`provider:`型サービス(外部クラウドDB等)をComposeネットワーク上の
     通常コンテナのように見せるためのTCPゲートウェイ。`docker/compose-relay`イメージとして

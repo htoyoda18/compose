@@ -1,3 +1,5 @@
+[root](../../note.md) / [cmd](../note.md) / compose
+
 # cmd/compose メモ
 
 `docker compose` の各サブコマンド(up, down, ps, logs, ...)を定義するcobraコマンド層。

@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / [compose](note.md) / containers.go
+
 - 責務
   - プロジェクト配下のコンテナ一覧を取って、必要に応じて絞り込み・並べ替えする
 - Containers

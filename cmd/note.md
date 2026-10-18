@@ -1,3 +1,5 @@
+[root](../note.md) / cmd
+
 - [cmdtrace](cmdtrace/note.md)
   - コマンド実行のトレース機能
   - cobra コマンドの `PersistentPreRunE` から呼ばれ、Docker コンテキストや OTEL\_ 環境変数を元に tracer を初期化し、コマンド全体を覆うルートスパンを生成する
@@ -14,7 +16,7 @@
   - 表示モード管理
   - TTY/Plain/JSON/Quiet といった進捗表示モード (`mode.go`) と、各モードに対応するレンダラー実装 (`tty.go` など) を持つ
   - コマンド実行中に発生するイベントをどう画面に描画するかを一元的に管理する
-- formatter
+- [formatter](formatter/note.md)
   - 出力フォーマット処理
   - `ps`/`images` などの一覧系コマンドの出力を table/JSON/pretty などの形式に変換する (`formatter.go`)
   - コンテナ状態の色付け表示 (`container.go`) やログのプレフィックス整形 (`logs.go`) も担う

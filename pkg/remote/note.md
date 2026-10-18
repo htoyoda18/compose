@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / remote
+
 - cache_darwin.go
   - macOS
 - [cache_unix.go](cache_unix.go.md)

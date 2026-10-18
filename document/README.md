@@ -3,6 +3,8 @@
 Docker Compose リポジトリを学習・調査した際の個人メモ置き場。
 1 つのトピックは 1 つのファイルにだけ書き、関連する話はリンクでたどる。
 
+ディレクトリ・ファイル単位のコードノート(`note.md` / `xxx.go.md`)は、リポジトリ直下の [note.md](../note.md) から辿る。
+
 ## concepts/ — 一般的な概念（このリポジトリに依存しない）
 
 | ファイル | 内容 |
@@ -26,8 +28,9 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 
 | ファイル | 内容 |
 | --- | --- |
-| [overview.md](./codebase/overview.md) | プロジェクト概要（ルートファイル、主な特徴、技術スタック） |
+| [overview.md](./codebase/overview.md) | プロジェクト概要（主な特徴、技術スタック） |
 | [architecture.md](./codebase/architecture.md) | ディレクトリ構造・レイヤー構成、インターフェース駆動設計と SDK、並行処理、イベントシステム |
+| [flow.md](./codebase/flow.md) | 処理の流れ（cmd/main.go から pkg/compose までの共通の流れと、up / down / build / run / logs / watch ごとの流れ） |
 | [plan-engine.md](./codebase/plan-engine.md) | plan engine（観測 → 計画 → 実行）。`up` などが差分を埋める仕組みと、どのコマンドがそれを通るか |
 | [cli.md](./codebase/cli.md) | CLI 実装（cobra、トレーシング / OpenTelemetry、Docker コンテキスト、プラグイン版 / スタンドアロン版） |
 | [internal.md](./codebase/internal.md) | internal/ 配下（インメモリソケット、PID ファイル、実行時ディレクトリ、レジストリ、マニフェスト / blob、シンボリックリンク） |
@@ -73,19 +76,20 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
    - （Q&A）[concepts/go-qa.md](./concepts/go-qa.md)
 9. [codebase/overview.md](./codebase/overview.md)
 10. [codebase/architecture.md](./codebase/architecture.md)
-11. [codebase/cli.md](./codebase/cli.md)
-12. [codebase/plan-engine.md](./codebase/plan-engine.md)
-13. [codebase/internal.md](./codebase/internal.md)
-14. [codebase/reading-guide.md](./codebase/reading-guide.md)
-15. [codebase/development.md](./codebase/development.md)
-16. [codebase/testing.md](./codebase/testing.md)
-17. [pkg/e2e/SCENARIO.md](../pkg/e2e/SCENARIO.md)
-18. [contributing/README.md](./contributing/README.md)
-19. [CONTRIBUTING.md](../CONTRIBUTING.md) と [AI_POLICY.md](../AI_POLICY.md)
-20. [contributing/pr-trends.md](./contributing/pr-trends.md)
-21. [contributing/pr-review-patterns.md](./contributing/pr-review-patterns.md)
-22. [contributing/checklist.md](./contributing/checklist.md)
-23. [tracking/next-tasks.md](./tracking/next-tasks.md)
-24. [tracking/issues.md](./tracking/issues.md)
-25. [tracking/todo.md](./tracking/todo.md)
-26. [tracking/fixme.md](./tracking/fixme.md)
+11. [codebase/flow.md](./codebase/flow.md)
+12. [codebase/cli.md](./codebase/cli.md)
+13. [codebase/plan-engine.md](./codebase/plan-engine.md)
+14. [codebase/internal.md](./codebase/internal.md)
+15. [codebase/reading-guide.md](./codebase/reading-guide.md)
+16. [codebase/development.md](./codebase/development.md)
+17. [codebase/testing.md](./codebase/testing.md)
+18. [pkg/e2e/SCENARIO.md](../pkg/e2e/SCENARIO.md)
+19. [contributing/README.md](./contributing/README.md)
+20. [CONTRIBUTING.md](../CONTRIBUTING.md) と [AI_POLICY.md](../AI_POLICY.md)
+21. [contributing/pr-trends.md](./contributing/pr-trends.md)
+22. [contributing/pr-review-patterns.md](./contributing/pr-review-patterns.md)
+23. [contributing/checklist.md](./contributing/checklist.md)
+24. [tracking/next-tasks.md](./tracking/next-tasks.md)
+25. [tracking/issues.md](./tracking/issues.md)
+26. [tracking/todo.md](./tracking/todo.md)
+27. [tracking/fixme.md](./tracking/fixme.md)

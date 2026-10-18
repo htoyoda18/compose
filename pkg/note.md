@@ -1,12 +1,14 @@
+[root](../note.md) / pkg
+
 - [api](api/note.md)
   - Docker Compose API の公開インターフェース
   - `Compose`インターフェース(Up/Down/Ps等)とOptions/イベント/エラー定義を持つ、実装を持たない契約のみのパッケージ
   - `compose`がこれを実装し、`mocks`がテスト用にモック実装する
-- bridge
+- [bridge](bridge/note.md)
   - `docker compose bridge`。composeプロジェクトをKubernetes manifest等の別形式に変換する
   - 「transformerイメージ」をコンテナとして実行して変換するパイプラインと、そのイメージの雛形生成・一覧取得を持つ
-- compose
-  - Docker Compose のコア実装。`api.Compose`インターフェースの実装本体(`composeService`)で、pkg最大(実装68ファイル)
+- [compose](compose/note.md)
+  - Docker Compose のコア実装。`api.Compose`インターフェースの実装本体(`composeService`)で、pkg最大(実装62ファイル)
   - 各ファイルは`cmd/compose`の同名コマンドファイルとほぼ1対1対応し、`up`は観測→計画→並列実行の3段構成になっている
 - dryrun
   - `--dry-run`の実装。`client.APIClient`を丸ごと実装した`DryRunClient`が実際のDocker Engineには何も送らず、結果だけ組み立てて返す

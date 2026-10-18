@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / api
+
 - api_test.go
   - テスト
 - [api.go](api.go.md)

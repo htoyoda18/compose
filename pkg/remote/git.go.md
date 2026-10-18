@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / [remote](note.md) / git.go
+
 - 責務
   - Git リポジトリからのリモートリソース読み込み
 - gitRemoteLoader

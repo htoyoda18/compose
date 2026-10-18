@@ -1,3 +1,5 @@
+[root](../../note.md) / [cmd](../note.md) / compatibility
+
 # cmd/compatibility メモ
 
 `docker-compose`(standalone バイナリ)として起動された場合に、旧来の

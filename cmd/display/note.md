@@ -1,3 +1,5 @@
+[root](../../note.md) / [cmd](../note.md) / display
+
 # cmd/display メモ
 
 `docker compose`の進捗表示(TTY/Plain/JSON/Quiet)を担うパッケージ。

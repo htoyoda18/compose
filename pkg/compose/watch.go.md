@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / [compose](note.md) / watch.go
+
 - 概要
   - watch 設定を集めてルール化
   - ファイル変更イベントを監視してバッチ化

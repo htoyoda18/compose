@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / [bridge](note.md) / transformers.go
+
 - 概要
   - Compose Bridge 用の“Transformer イメージ”を作るための雛形ディレクトリを生成する
 - ざっくりした処理

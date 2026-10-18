@@ -1,3 +1,5 @@
+[root](../../note.md) / [cmd](../note.md) / cmdtrace
+
 # cmd/cmdtrace メモ
 
 Docker Compose CLI の各コマンド実行を OpenTelemetry でトレース(計測)するためのディレクトリ。

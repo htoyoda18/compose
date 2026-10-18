@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / [compose](note.md) / wait.go
+
 - ざっくり全体的な処理
   - コンテナの取得
     - getContainers で指定プロジェクトのコンテナを取得

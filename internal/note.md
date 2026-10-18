@@ -1,3 +1,5 @@
+[root](../note.md) / internal
+
 - desktop
   - Docker Desktop 統合
     - Docker Desktop アプリケーションとの通信・連携機能

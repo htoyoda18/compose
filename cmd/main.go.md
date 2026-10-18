@@ -1,3 +1,5 @@
+[root](../note.md) / [cmd](note.md) / main.go
+
 - ルートファイル
 - ざっくりした処理の流れ
   - docker compose ... が呼ばれたときに、Compose の cobra ルートコマンドを組み立てて実行

@@ -15,54 +15,9 @@ Docker Compose v2 は、Docker 上でマルチコンテナアプリケーショ�
 - **テストファイル数**: 89 ファイル
 - **コア実装**: 約 16,558 行
 
-## ルートファイル/ルートディレクト
+## ルートファイル/ルートディレクトリ
 
-- .github
-  - GitHub 設定
-- [cmd](../../cmd/note.md)
-  - エントリーポイント
-- docs
-  - ドキュメント
-- [internal](../../internal/note.md)
-  - 内部パッケージ
-- [pkg](../../pkg/note.md)
-  - 公開パッケージ
-- .dockerignore
-  - Docker ビルド時に無視するファイル
-- .gitattributes
-  - Git 属性の設定
-- .gitignore
-  - Git で追跡しないファイル/ディレクトリ
-- .go-version
-  - 使用する Go のバージョン
-- .golangci.yml
-  - コード品質チェックツール
-- AGENTS.md
-  - AI コーディングエージェント用のドキュメント
-- BUILDING.md
-  - ビルド方法の詳細説明
-- codecov.yml
-  - コードカバレッジ測定
-- CONTRIBUTING.md
-  - 貢献者向けのガイドライン
-- docker-bake.hcl
-  - Docker Buildx の設定ファイル
-- Dockerfile
-  - Docker Compose のバイナリをビルドする
-- go.mod
-  - Go モジュールの依存関係管理
-- go.sum
-  - Go モジュールの依存関係管理
-- LICENSE
-  - Apache License 2.0 のライセンス
-- logo.png
-  - Docker Compose のロゴ画像
-- Makefile
-  - ビルド、テスト、リリースなどの主要なコマンドを定義
-- NOTICE
-  - 著作権表示
-- README.md
-  - プロジェクトの概要説明
+各ディレクトリ・ファイルの説明は、コードノートの入口 [note.md](../../note.md) にまとめている。
 
 ## 主な特徴
 

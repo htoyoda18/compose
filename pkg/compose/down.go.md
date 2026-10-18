@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / [compose](note.md) / down.go
+
 - docker compose down 相当の処理
   - コンテナ停止・削除、必要に応じてネットワーク/ボリューム/イメージ削除
 - Down

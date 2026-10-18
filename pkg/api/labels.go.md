@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / [api](note.md) / labels.go
+
 - 責務
   - Docker ラベル定数定義
 - リソース追跡ラベル

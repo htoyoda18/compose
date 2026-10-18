@@ -1,3 +1,5 @@
+[root](../../note.md) / [pkg](../note.md) / [remote](note.md) / oci.go
+
 - 責務
   - OCI イメージからの Compose プロジェクト読み込み
 - ociRemoteLoader

@@ -1,3 +1,5 @@
+[root](../../note.md) / [cmd](../note.md) / formatter
+
 # cmd/formatter メモ
 
 `cmd/display`が「Composeの操作進捗(プログレスバー)」を担うのに対し、
