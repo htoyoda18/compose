@@ -31,7 +31,7 @@
 | 順 | タスク | 種類 | 検証 | 後押し | 衝突リスク | 規模 | 最初の一手 | 進捗 |
 | -: | ------ | ---- | ---- | ------ | ---------- | ---- | ---------- | ---- |
 | 1 | [CI の unit テストで毎回 1 件の偽の FAIL が出る](#1-ci-の-unit-テストで毎回-1-件の偽の-fail-が出る) | CI の衛生 | **テスト** | △ thaJeztah が本物の失敗と取り違えかけた | 低 | XS | そのまま PR | 🟡 [#14351](https://github.com/docker/compose/pull/14351) レビュー待ち |
-| 2 | [`run` が依存サービスを作り直すと匿名ボリュームを引き継がない](#2-run-が依存サービスを作り直すと匿名ボリュームを引き継がない) | **データ消失**（未報告） | コード | △ 関連 issue #13769 | 低〜中 | XS（+e2e） | 実機で再現 → issue | 未着手 |
+| 2 | [`run` が依存サービスを作り直すと匿名ボリュームを引き継がない](#2-run-が依存サービスを作り直すと匿名ボリュームを引き継がない) | **データ消失** | **実機** | △ 関連 issue #13769 | 低〜中 | XS（+e2e） | 実機で再現 → issue | 🟡 issue [#14357](https://github.com/docker/compose/issues/14357)、PR [#14358](https://github.com/docker/compose/pull/14358) レビュー待ち |
 | 3 | [watch の監視中に `.git/` が除外されない](#3-watch-の監視中に-git-が除外されない) | バグ（未報告） | **テスト** | △ glours が #14217 で同種の欠陥を指摘 | 中（`watch.go`） | XS | issue を立てる | 未着手 |
 | 4 | [bake のビルドが curl の書式指定などで失敗する](#4-bake-のビルドが-curl-の書式指定などで失敗する) | バグ（未報告） | **テスト** | ○ ndeloof が `${` を同じ形で直した前例 | 低 | S | issue を立てる | 未着手 |
 | 5 | [`down` の pre_start フックコンテナ後始末](#5-down-の-pre_start-フックコンテナ後始末) | バグ | コード | ◎ メンテナが「別 PR で出してよい」 | 低〜中 | S〜M | (b) のマージ後に (a)(d) を PR | 🟡 (b) [#14310](https://github.com/docker/compose/pull/14310) APPROVED、CI の実行承認待ち |
@@ -110,6 +110,11 @@
   `run` は #14081 の対象外。
 - **最初の一手**: **まだ実機で再現していない**。まず手元で再現し、「`up` では残るのに `run` では消える」を示して issue を立てる（#13769 を引用）。
   データ消失なので、メンテナの反応は早いはず。修正が 1 行なので、issue と同時に PR を出してもよい。
+- **進捗**（2026-10-19）: issue [#14357](https://github.com/docker/compose/issues/14357)（status/0-triage）と、PR [#14358](https://github.com/docker/compose/pull/14358) `fix(run): keep a recreated dependency's anonymous volumes`（OPEN、REVIEW_REQUIRED、コメント無し）を出した。
+  - 実機で再現した: リリース版の 5.0.1 と upstream main の両方。古いボリュームは dangling で残るので、データは手で取り戻せる。
+  - 変更: `run.go` に `Inherit: true` の 1 行（とコメント）、e2e の `TestComposeRunInheritsAnonymousVolumes`。修正前は失敗し、修正後は通ることを確認した。
+  - 詳しくは [pr/pr-14358.md](../../pr/pr-14358.md)。
+  - **次の一手**: レビューを待つ。PR 本文の AI Tool の欄が空なので、編集して埋める。承認後はブランチを触らない。
 
 ## 3. watch の監視中に `.git/` が除外されない
 
