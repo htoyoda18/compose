@@ -43,8 +43,8 @@
 | ---- | ------------------ | -------- | ---- |
 | PR [#14310](https://github.com/docker/compose/pull/14310) down のフック後始末 | APPROVED。CI の実行承認待ち | 待つ。ブランチは触らない | [5](#5-down-の-pre_start-フックコンテナ後始末) |
 | PR [#14351](https://github.com/docker/compose/pull/14351) CI の偽の FAIL | REVIEW_REQUIRED（10-17 から動き無し） | 待つ。本文の AI Tool の欄と、Related issue に残った `Fixes #` を直す | [1](#1-ci-の-unit-テストで毎回-1-件の偽の-fail-が出る) |
-| issue [#14357](https://github.com/docker/compose/issues/14357) + PR [#14358](https://github.com/docker/compose/pull/14358) `run` の匿名ボリューム | REVIEW_REQUIRED | 本文の AI Tool の欄を埋める。`scale` の同じバグ（[N10](#n10-scale-も匿名ボリュームを引き継がない)）を issue に追記するか考える | [2](#2-run-が依存サービスを作り直すと匿名ボリュームを引き継がない) |
-| issue [#14362](https://github.com/docker/compose/issues/14362) + PR [#14363](https://github.com/docker/compose/pull/14363) watch の `.git` | REVIEW_REQUIRED | 本文の AI Tool の欄を埋める | [3](#3-watch-の監視中に-git-が除外されない) |
+| ✅ PR [#14358](https://github.com/docker/compose/pull/14358) `run` の匿名ボリューム（issue #14357） | **2026-10-20 にマージ**（ndeloof） | 急がない指摘 2 つ（`api.go` の古いコメント、testdata の説明）のフォローアップ。`scale` の同じバグ（[N10](#n10-scale-も匿名ボリュームを引き継がない)） | [2](#2-run-が依存サービスを作り直すと匿名ボリュームを引き継がない)、[pr-14358.md](../../pr/pr-14358.md) |
+| ✅ PR [#14363](https://github.com/docker/compose/pull/14363) watch の `.git`（issue #14362） | **2026-10-20 にマージ**（ndeloof、指摘なし） | 同じ種類の [N6](#n6-許可リスト型の-dockerignore-で-watch-が無視のルールを全部捨てる) | [3](#3-watch-の監視中に-git-が除外されない)、[pr-14363.md](../../pr/pr-14363.md) |
 | PR [#14284](https://github.com/docker/compose/pull/14284) `ensureModels` | CHANGES_REQUESTED（上流の修正の配布待ち） | apt に新しい docker-model が出たら rebase | [8](#8-ensuremodels-のエラー無視とデータ競合) |
 | issue [#14311](https://github.com/docker/compose/issues/14311) `start -p` | open、反応無し | [保留](#保留メンテナの方針と合わなかったもの) | — |
 
@@ -90,7 +90,7 @@
 
 - **1 と 2 だけは急ぐ**。1 は次のリリース（v5.6.0 の次）に入る前に知らせる価値が最も大きい。2 はセキュリティなので、必ず非公開の窓口で。
 - **3〜13 は、どれも「まだ報告されていない問題」**。AI_POLICY.md の「No contribution farming」は、未報告の問題について AI を使った PR を出す前に、issue でメンテナに必要性を確かめてもらい、承認を得ることを求めている。だから順番は必ず「issue → 承認 → PR」。
-- **メンテナの注意は限られている**。今も自分の PR が 5 本開いている。新しい issue は 1〜2 件ずつ、反応を見ながら出す。規模に対する効果が最も大きいのは、データ消失の N2 と、性能の N3。
+- **メンテナの注意は限られている**。自分の PR は 3 本開いている（10-20 に 2 本マージされた）。新しい issue は 1〜2 件ずつ、反応を見ながら出す。規模に対する効果が最も大きいのは、データ消失の N2 と、性能の N3。
 - **plan engine の中のもの（N1、N8、N9）は、issue に再現手順と原因の場所を書くところまで**。直し方は ndeloof の判断に任せる。
 - 「その次」の表は、上位が片付いてから。
 
@@ -404,7 +404,9 @@
   - 変更: `run.go` に `Inherit: true` の 1 行（とコメント）、e2e の `TestComposeRunInheritsAnonymousVolumes`。修正前は失敗し、修正後は通ることを確認した。
   - 詳しくは [pr/pr-14358.md](../../pr/pr-14358.md)。
   - **次の一手**: レビューを待つ。PR 本文の AI Tool の欄が空なので、編集して埋める。承認後はブランチを触らない。
-  - 2026-10-20 時点: 変化なし（PR も issue もメンテナの反応はまだ無い。AI Tool の欄も空のまま）。
+  - **2026-10-20 にマージ**（ndeloof が APPROVED してマージ。issue #14357 もクローズ）。
+    承認の理由として、「修正前は正しい理由（`cat: can't open '/data/marker'`）で失敗し、修正後に通る」ことがそのまま引用された。
+    急がない指摘が 2 つ: `pkg/api/api.go` の `RunOptions.CreateOptions` のコメントが古い（`Inherit` は無視される、と書いたまま）、testdata の `init: true` と `COMPOSE_IGNORE_ORPHANS=True` の理由を書くとよい。どちらもフォローアップの候補。
 
 ## 3. watch の監視中に `.git/` が除外されない
 
@@ -430,6 +432,7 @@
   - 実機での確認: 1 回の編集で再ビルドは 1 回、空のコミットで 0 回（修正前は 30 秒で 40 回）。watch の e2e 7 本も通る。
   - 検証で 1 度誤った: watch のログを監視対象のディレクトリの中に書くと、それ自体が再ビルドを起こす。ログは必ず監視の外に書く。
   - **次の一手**: レビューを待つ。PR 本文の AI Tool の欄が空なので、編集して埋める。#14217 が先にマージされたら rebase する。
+  - **2026-10-20 にマージ**（ndeloof が指摘なしで APPROVED してマージ。issue #14362 もクローズ）。詳しくは [pr/pr-14363.md](../../pr/pr-14363.md)。
 
 ## 4. bake のビルドが curl の書式指定などで失敗する
 
