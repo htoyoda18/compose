@@ -6,7 +6,7 @@
 メンテナの後押しがあるか）を物差しにして、「まだ誰も着手していない、外部から着手できて、
 プロジェクトを本当に良くするタスク」を探した結果。
 
-- 調査日: 2026-10-03（初回）、2026-10-16（再調査）、2026-10-20（第 3 回）
+- 調査日: 2026-10-03（初回）、2026-10-16（再調査）、2026-10-20（第 3 回）、2026-10-22（[新機能の候補](#新機能の候補2026-10-22)）
 - 基準コード: `upstream/main` 289d8a037（2026-10-16）。最新リリースは v5.6.0（10-02）で、そこから main までに**未リリースのコミットが 127 件**ある（plan engine の大きな変更を含む）
   - 前回までの節（1〜13）のコードリンクは、当時の 7b36d08dd を指したまま。第 3 回の節（N1〜N17）の行番号は 289d8a037 のもの
 - 調べたもの:
@@ -101,6 +101,96 @@
 - 13（Windows）は、壊れているのが `pkg/compose` だけと分かり、修正の試作と CI のチェックの案ができたので、順位を上げた。
 - 6（watch の symlink のテスト）は、CI 全体の集計で、残っている唯一の未修正の不安定なテストと分かった。
 - 4（bake）は、テンプレートとして評価されるのが args などに限らず、ビルドのすべての文字列だと分かった。
+
+---
+
+## 新機能の候補（2026-10-22）
+
+ここまでの候補はバグの修正が中心。この節は「もっと簡単に、もっと安全に、もっと色々なことができる」ようにする新機能の候補。
+
+- 調べたもの（調査のエージェント 3 つで並行して調べ、決め手になる発言は自分でも読んだ）:
+  - [docker/roadmap](https://github.com/docker/roadmap): 全 780 件のうち、Compose に関係するもの約 30 件
+  - docker/compose の機能の要望: 👍 の多い順の上位、open と closed（stale や not planned で閉じたものも含む）
+  - 2026-06 以降にマージされた機能の PR とエピック、[compose-spec](https://github.com/compose-spec/compose-spec) の 👍 の多い issue、コードの中の「not supported」
+- 物差し: [pr-trends.md](../contributing/pr-trends.md) と同じ。加えて、新機能は**必ず issue で合意を取ってから**（[pr-trends.md の 1](../contributing/pr-trends.md)）。メンテナが「歓迎する」と書いているものを優先する。
+- 分かったこと:
+  - 👍 の多い要望の上位約 40 件のうち、39 件は閉じている。ほとんどは実装済み（`watch`、`include`、profiles、フック、`--dry-run` など）か、方針で却下（[やらないもの](#やらないもの理由つき)の最後の行）。**「👍 が多くて手付かず」のものは、もうほぼ残っていない**。
+  - docker/roadmap は、Compose についての情報源としては弱い。Go への書き直し（#15）を除くと、どれも 👍 は 43 以下で、Docker の担当者の返答もほとんど無い。
+  - そのため、物差しは「👍 の数」より「**メンテナが歓迎と書いているか**」と「**メンテナの作業とぶつからないか**」のほうが効く。
+
+### 候補（先にやる順）
+
+| 順 | 候補 | 方向 | 後押し | 衝突 | 規模 | 最初の一手 |
+| -: | ---- | ---- | ------ | ---- | ---- | ---------- |
+| F1 | [ターミナルのタブやタスクバーに進捗を出す](#f1-ターミナルのタブやタスクバーに進捗を出す)（[#14365](https://github.com/docker/compose/issues/14365)） | 簡単に | **強い**（ndeloof が 10-21 に「歓迎」） | 低 | S | issue で、9;4 と 7501 のどちらから始めるかと、オプトアウトの方法を決める |
+| F2 | [`publish --annotation`](#f2-publish---annotation)（[#13739](https://github.com/docker/compose/issues/13739)） | 色々なことが | **強い**（PR #13852 は ndeloof が承認済み） | 低 | S | 元の作者に、続けるかどうかを聞く |
+| F3 | [サービスが healthy になった後に走るフック](#f3-サービスが-healthy-になった後に走るフック)（[#13203](https://github.com/docker/compose/issues/13203)） | 色々なことが | 中（ndeloof「考えていた」「新しい種類のフックで」） | 中 | M（spec + compose-go + compose） | chris3713 の試作と組むか聞く |
+| F4 | [`pre_start` の `per_replica`](#f4-pre_start-の-per_replica)（[#14259](https://github.com/docker/compose/issues/14259)） | 色々なことが | 中（ndeloof 自身の issue。設計の案つき） | **高**（plan engine） | M | #14305 がマージされるまで待つ |
+| F5 | [`down -v` で消すボリュームを確かめる](#f5-down--v-で消すボリュームを確かめる)（roadmap [#665](https://github.com/docker/roadmap/issues/665)） | 安全に | 弱い（返答は「`--volumes` がある」だけ） | 低 | S | 挙動が変わるので、issue で合意から。却下される見込みも高い |
+| F6 | [`ls` / `images` の `--format` を Go テンプレートにする](#f6-ls--images-の---format-を-go-テンプレートにする)（[#12948](https://github.com/docker/compose/issues/12948)） | 簡単に | 中（ndeloof「docker/cli と同じやり方で」） | 低 | S | issue で、今もその方向でよいか確かめる |
+
+### F1. ターミナルのタブやタスクバーに進捗を出す
+
+- **何が良くなるか**: `up` や `pull` や `build` の進み具合が、ターミナルのタブやタスクバーに出る。別の作業をしていても、終わったことや失敗したことが分かる。
+- **後押し**: ndeloof が 10-21 に、実装の場所まで示して「A contribution along those lines would be welcome」と書いている。
+  - 進捗の数は、TTY の表示がすでに持っている（`cmd/display/tty_model.go` の `taskTree.counts()`）。
+  - 条件は 3 つ: 対応している端末が多い OSC 9;4 から始めるか、両方を 1 つの仕組みで扱う。TTY のときだけ出す（`plain`、`json`、`quiet` では出さない）。オプトアウトの方法を用意する。
+- **注意**: issue の作者の nihaals が、OSC 9;4 が通知用の OSC 9 と重なる問題を指摘している（uv での例）。作者が自分で PR を出すつもりかも分からない。手を出す前に、issue で一声かける。
+- **衝突**: 低。`cmd/display` は、plan engine のエピックの外にある。
+
+### F2. `publish --annotation`
+
+- **何が良くなるか**: `publish` で push する compose の OCI アーティファクトに、任意の annotation（出どころ、バージョン、説明など）を付けられる。レジストリや署名の仕組みと組み合わせやすくなる。
+- **状況**: [#13852](https://github.com/docker/compose/pull/13852)（Mohataseem89）は、ndeloof が承認したまま、bot に stale で 10-21 に閉じられた。今はコンフリクトがある。
+- **最初の一手**: まず、元の作者に、作り直すつもりがあるかを PR で聞く。返事が無ければ、元の作者の名前（Co-authored-by）を残して作り直す。push と publish は glours の担当範囲なので、作り直す前にそのことも書く。
+- 規模は小さく、「劇的」ではない。ただ、承認まで済んでいるので、新機能の最初の 1 本として、メンテナとの往復を体験するのに向いている。
+
+### F3. サービスが healthy になった後に走るフック
+
+- **何が良くなるか**: DB が healthy になった後のマイグレーションやデータの投入、キャッシュの温めを、compose.yaml の中だけで書ける。今は `post_start` が起動の直後に走るので、healthy を自分でポーリングするスクリプトが要る。
+- **後押し**: ndeloof は「フックを入れたときから考えていた。使われ方を見るために遅らせた」（2025-09）、ボランティアに「please do」（2026-01）と書いている。2026-08 には「`post_start` に条件を足すより、新しい種類のフックのほうがよい」。
+- **状況**: chris3713 が `post_start` に条件を足す形の試作を作り、その後 `post_healthy` という新しいフックを提案した（08-26）。メンテナの返事はまだ無い。
+- **進め方**: compose-spec → compose-go → compose の 3 か所に変更が要る。まず chris3713 と組めるかを聞き、spec の提案から始める。
+- **近い要望**: [#10596](https://github.com/docker/compose/issues/10596)（👍29、init 用のコンテナが exit 0 すると `--wait` が失敗する）のうち、誰からも依存されない後処理は、このフックで書けるようになる（[次点](#次点先に-issue-で合意を取ってから)を参照）。
+
+### F4. `pre_start` の `per_replica`
+
+- **何が良くなるか**: レプリカごとの初期化（設定ファイルの生成、ボリュームの準備）ができる。今は spec が `per_replica: true` を受け付けるのに、実行すると必ずエラーになる（`pkg/compose/pre_start.go:117`、`reconcile.go:998`）。
+- **後押し**: ndeloof 自身が #14259 を立て、作り方も書いている（フック × レプリカごとに 1 つのコンテナ、レプリカのラベル、`VolumesFrom` をそのレプリカに向ける）。
+- **衝突**: 高。`pre_start` は plan engine の中にあり、#14305 などが書き換え中。それが片付くまで待ち、始める前に issue で「やります」と書く。
+
+### F5. down -v で消すボリュームを確かめる
+
+- **何が良くなるか**: データの消失を防ぐ。`-v` を「verbose」と勘違いしてデータを消したという報告が、2026-02、07、09 にも来ている（roadmap #665、👍5、コメント 10 件）。[N2](#n2-down--v-が同じ名前を持つ別のプロジェクトのボリュームを消す) と [N7](#n7-down--v-でサービスを指定すると依存先の名前付きボリュームが消える) も、同じ「`down -v` が思ったより多くを消す」問題。
+- **案**: TTY のときだけ、消す名前付きボリュームの一覧を出して確かめる。`-y` で飛ばせる。`up` は、すでにボリュームを作り直すときに確認を出している。
+- **難しさ**: CI やスクリプトの挙動が変わる。thaJeztah の返事は「`-v` は `--volumes` の短縮形」だけで、メンテナの後押しは無い。[やらないもの](#やらないもの理由つき)の #13554 のように、「出力や挙動を変えない」で却下される見込みも高い。issue で温度を確かめるところまで。
+
+### F6. ls / images の --format を Go テンプレートにする
+
+- **何が良くなるか**: `docker ps --format '{{.Names}}'` と同じ書き方で、`docker compose ls` や `images` の出力をスクリプトから使える。
+- **状況**: ndeloof は、[#12949](https://github.com/docker/compose/pull/12949) で「docker/cli と同じやり方で」と方向を示した。その PR と #13952 は、どちらも stale で閉じた。
+- 規模は小さく、「劇的」ではない。F1 と F2 の次に。
+
+### 大きいが、今は手を出さないもの
+
+| 候補 | 👍 | 理由 |
+| ---- | -: | ---- |
+| bind mount の所有者や権限を指定する（roadmap [#398](https://github.com/docker/roadmap/issues/398)） | 43 | roadmap の Compose 関係で最も 👍 が多い。ただし、uid/gid の変換は Engine 側の機能（idmapped mount）が要る。Docker の担当者の返事は無い |
+| リモートの Docker で `file:` の configs / secrets を使う（[#11867](https://github.com/docker/compose/issues/11867)） | 30 | すでに[次点](#次点先に-issue-で合意を取ってから)にある。実装の PR が 4 本閉じている（ndeloof 自身の #12625 を含む）。オプトアウトではなくオプトインにする必要があり、設計の提案から（L） |
+| `up --wait` 中にログを流す（[#9122](https://github.com/docker/compose/issues/9122)） | 23 | すでに[次点](#次点先に-issue-で合意を取ってから)にある。進捗の表示と、#14305 / #14306 の作業にぶつかる。衝突の小さい部分は [N14](#n14-unhealthy-で失敗したときに-healthcheck-の出力を出す) |
+| 定義済みの変数（サービス名、作業ディレクトリなど）を compose.yaml の中で使う（compose-spec [#248](https://github.com/compose-spec/compose-spec/issues/248)） | 23 | spec、compose-go、compose の 3 か所に変更が要るのに、メンテナの設計の返事が無い。UID/GID の変数は方針で却下されている（#7853） |
+| bake ファイルを build の定義に使う（[#12581](https://github.com/docker/compose/issues/12581)） | 10 | すでに[次点](#次点先に-issue-で合意を取ってから)にある。glours は「後方互換なら歓迎」。ただし ndeloof はトップレベルの `images`（compose-spec #188）と結び付けていて、設計が決まっていない（L） |
+| レプリカを 1 つずつ起動する（[#14232](https://github.com/docker/compose/issues/14232)） | 1 | ndeloof が `start_policy: sequential` という形を示した（`deploy` の下には置かない）。起動は plan engine の中なので、エピックが片付いてから |
+| スケジュール実行の jobs | — | glours の draft [#14155](https://github.com/docker/compose/pull/14155) が進行中 |
+
+### セキュリティの方向で分かったこと
+
+「もっとセキュアに」の新機能で、メンテナの後押しがあるものは、今は見つからなかった。
+
+- **イメージの署名の検証**: docker/cli が v29.9 で Docker Content Trust を取り除いた。ndeloof は「`docker pull` と同じ挙動にしたい」として #13933 を not planned で閉じている。Engine が先に対応しない限り難しい。
+- **外部の secrets ストア**: #13821 は「docker/secrets-engine を使って」として not planned。
+- **`config` の出力の秘密情報を伏せる**: [#14356](https://github.com/docker/compose/issues/14356) に、ndeloof は「not convinced」で、既定の出力は変えないという立場。
+- 安全側の改善で筋が良いのは、新機能より既存の穴を塞ぐほう。たとえば [N2](#n2-down--v-が同じ名前を持つ別のプロジェクトのボリュームを消す)、[N7](#n7-down--v-でサービスを指定すると依存先の名前付きボリュームが消える)、[N15](#n15-publish-の機密データの検査が-push-する中身を見ていない)、[次点](#次点先に-issue-で合意を取ってから)の「リモートの compose が環境変数の値を平文で表示する」。
 
 ---
 
