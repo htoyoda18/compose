@@ -24,7 +24,9 @@ Compose が何をするツールで、リポジトリがどう分かれている
 1. [concepts/go.md](./concepts/go.md) — goroutine / context / interface など、コードを読むのに必要な Go
    - (Q&A)[concepts/go-qa.md](./concepts/go-qa.md)
 2. [codebase/flow.md の「共通の流れ」](./codebase/flow.md#共通の流れ) — main.go から pkg/compose まで
+   - (Q&A)[codebase/flow-qa.md](./codebase/flow-qa.md)
 3. [cmd/note.md](../cmd/note.md) → [cmd/main.go.md](../cmd/main.go.md) — CLI 層とエントリーポイント
+   - (Q&A)[cmd/note-qa.md](../cmd/note-qa.md)
 4. [codebase/cli.md](./codebase/cli.md) — cobra、プラグイン版 / スタンドアロン版、Docker コンテキスト
 5. [cmd/compose/note.md](../cmd/compose/note.md) → [cmd/compose/up.go.md](../cmd/compose/up.go.md) — サブコマンドの実装
 6. [pkg/note.md](../pkg/note.md) → [pkg/api/note.md](../pkg/api/note.md) → [pkg/api/api.go.md](../pkg/api/api.go.md) — CLI と本体をつなぐインターフェース
@@ -35,10 +37,11 @@ Compose が何をするツールで、リポジトリがどう分かれている
 
 1. [concepts/compose-concepts.md](./concepts/compose-concepts.md) — ラベル、収束処理、依存グラフ
 2. [concepts/compose-lifecycle.md](./concepts/compose-lifecycle.md) — depends_on、作り直しの判定と config hash、ラベル一覧
-3. [codebase/plan-engine.md](./codebase/plan-engine.md) — 観測 → 計画 → 実行
-4. [pkg/compose/note.md](../pkg/compose/note.md) → [up.go.md](../pkg/compose/up.go.md) → [create.go.md](../pkg/compose/create.go.md) → [containers.go.md](../pkg/compose/containers.go.md)
-5. [codebase/reading-guide.md](./codebase/reading-guide.md) — `up -d` をコードで最後まで読む順番
-6. [pkg/api/labels.go.md](../pkg/api/labels.go.md) — ラベル定数
+3. [codebase/algorithms.md](./codebase/algorithms.md) — 依存グラフ・DAG の実行・差分・ハッシュなど、使われているアルゴリズムを前提知識なしで（plan engine の前に 0〜4 章を読む）
+4. [codebase/plan-engine.md](./codebase/plan-engine.md) — 観測 → 計画 → 実行
+5. [pkg/compose/note.md](../pkg/compose/note.md) → [up.go.md](../pkg/compose/up.go.md) → [create.go.md](../pkg/compose/create.go.md) → [containers.go.md](../pkg/compose/containers.go.md)
+6. [codebase/reading-guide.md](./codebase/reading-guide.md) — `up -d` をコードで最後まで読む順番
+7. [pkg/api/labels.go.md](../pkg/api/labels.go.md) — ラベル定数
 
 ## Stage 4: Docker の下回り
 

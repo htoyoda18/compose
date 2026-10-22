@@ -1,5 +1,7 @@
 [root](../note.md) / cmd
 
+読んでいて出た疑問の Q&A は [note-qa.md](note-qa.md)。
+
 - [cmdtrace](cmdtrace/note.md)
   - コマンド実行のトレース機能
   - cobra コマンドの `PersistentPreRunE` から呼ばれ、Docker コンテキストや OTEL\_ 環境変数を元に tracer を初期化し、コマンド全体を覆うルートスパンを生成する

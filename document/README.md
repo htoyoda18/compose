@@ -34,6 +34,8 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [overview.md](./codebase/overview.md) | プロジェクト概要（主な特徴、技術スタック） |
 | [architecture.md](./codebase/architecture.md) | ディレクトリ構造・レイヤー構成、インターフェース駆動設計と SDK、並行処理、イベントシステム |
 | [flow.md](./codebase/flow.md) | 処理の流れ（cmd/main.go から pkg/compose までの共通の流れと、up / down / build / run / logs / watch ごとの流れ） |
+| [flow-qa.md](./codebase/flow-qa.md) | flow.md を読んで出た疑問の Q&A（NewComposeService、internal、plan engine の歴史、bake と classic、one-off コンテナ） |
+| [algorithms.md](./codebase/algorithms.md) | Compose で使われているアルゴリズム入門（グラフ、循環検出、依存順の並列処理、DAG の実行、セマフォ、差分、ハッシュ、デバウンス、連番）。前提知識なしで読める |
 | [plan-engine.md](./codebase/plan-engine.md) | plan engine（観測 → 計画 → 実行）。`up` などが差分を埋める仕組みと、どのコマンドがそれを通るか |
 | [cli.md](./codebase/cli.md) | CLI 実装（cobra、トレーシング / OpenTelemetry、Docker コンテキスト、プラグイン版 / スタンドアロン版） |
 | [internal.md](./codebase/internal.md) | internal/ 配下（インメモリソケット、PID ファイル、実行時ディレクトリ、レジストリ、マニフェスト / blob、シンボリックリンク） |

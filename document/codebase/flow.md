@@ -3,6 +3,7 @@
 コマンドを打ってから Docker Engine API が呼ばれるまでの流れ。前半は全コマンド共通、後半は主要コマンドごとの `pkg/compose` 内の流れ。
 各層の役割は [architecture.md](./architecture.md)、plan engine の詳細は [plan-engine.md](./plan-engine.md)、
 コードを読む順番は [reading-guide.md](./reading-guide.md) を参照。
+読んでいて出た疑問の Q&A は [flow-qa.md](./flow-qa.md)。
 
 ← [document 一覧](../README.md) / [コードノート入口](../../note.md)
 
