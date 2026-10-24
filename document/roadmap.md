@@ -10,8 +10,8 @@
 
 Compose が何をするツールで、リポジトリがどう分かれているかを掴む。
 
-1. [concepts/intro.md](./concepts/intro.md) — そもそも Docker / Compose とは
-   - (Q&A)[concepts/intro-qa.md](./concepts/intro-qa.md)
+1. [concepts/intro.md](../../docker-doc/concepts/intro.md) — そもそも Docker / Compose とは
+   - (Q&A)[concepts/intro-qa.md](../../docker-doc/concepts/intro-qa.md)
 2. [concepts/how-compose-works.md](./concepts/how-compose-works.md) — ラベルと差分埋めで動く仕組みを例で追う
 3. [codebase/overview.md](./codebase/overview.md) — このリポジトリの概要
 4. [コードノート入口(note.md)](../note.md) — ルートディレクトリの役割と依存関係の図
@@ -21,8 +21,8 @@ Compose が何をするツールで、リポジトリがどう分かれている
 
 `docker compose up` を打ってから `pkg/compose` が呼ばれるまでを追う。Go の基礎もここで押さえる。
 
-1. [concepts/go.md](./concepts/go.md) — goroutine / context / interface など、コードを読むのに必要な Go
-   - (Q&A)[concepts/go-qa.md](./concepts/go-qa.md)
+1. [concepts/go.md](../../docker-doc/concepts/go.md) — goroutine / context / interface など、コードを読むのに必要な Go
+   - (Q&A)[concepts/go-qa.md](../../docker-doc/concepts/go-qa.md)
 2. [codebase/flow.md の「共通の流れ」](./codebase/flow.md#共通の流れ) — main.go から pkg/compose まで
    - (Q&A)[codebase/flow-qa.md](./codebase/flow-qa.md)
 3. [cmd/note.md](../cmd/note.md) → [cmd/main.go.md](../cmd/main.go.md) — CLI 層とエントリーポイント
@@ -47,14 +47,14 @@ Compose が何をするツールで、リポジトリがどう分かれている
 
 Compose が呼んでいる Docker Engine 側と、その周辺の部品を理解する。
 
-1. [concepts/docker-engine.md](./concepts/docker-engine.md) — dockerd / containerd / runc、Engine API、BuildKit
-   - (Q&A)[concepts/docker-engine-qa.md](./concepts/docker-engine-qa.md)
-2. [concepts/container-tech.md](./concepts/container-tech.md) — namespace / cgroup / overlayfs
-   - (Q&A)[concepts/container-tech-qa.md](./concepts/container-tech-qa.md)
-3. [concepts/networking.md](./concepts/networking.md) — bridge / veth / DNS。Compose のネットワークの実体
-   - (Q&A)[concepts/networking-qa.md](./concepts/networking-qa.md)
-4. [concepts/oci.md](./concepts/oci.md) — イメージ、レイヤー、レジストリ
-   - (Q&A)[concepts/oci-qa.md](./concepts/oci-qa.md)
+1. [concepts/docker-engine.md](../../docker-doc/concepts/docker-engine.md) — dockerd / containerd / runc、Engine API、BuildKit
+   - (Q&A)[concepts/docker-engine-qa.md](../../docker-doc/concepts/docker-engine-qa.md)
+2. [concepts/container-tech.md](../../docker-doc/concepts/container-tech.md) — namespace / cgroup / overlayfs
+   - (Q&A)[concepts/container-tech-qa.md](../../docker-doc/concepts/container-tech-qa.md)
+3. [concepts/networking.md](../../docker-doc/concepts/networking.md) — bridge / veth / DNS。Compose のネットワークの実体
+   - (Q&A)[concepts/networking-qa.md](../../docker-doc/concepts/networking-qa.md)
+4. [concepts/oci.md](../../docker-doc/concepts/oci.md) — イメージ、レイヤー、レジストリ
+   - (Q&A)[concepts/oci-qa.md](../../docker-doc/concepts/oci-qa.md)
 5. [internal/note.md](../internal/note.md) → [codebase/internal.md](./codebase/internal.md) — OCI レジストリ操作、Desktop 連携、PID ファイルなど
 6. [pkg/remote/note.md](../pkg/remote/note.md) — `oci://` / `git://` の compose ファイルを取ってくる仕組み
 

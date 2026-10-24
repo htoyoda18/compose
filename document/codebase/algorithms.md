@@ -4,7 +4,7 @@
 「そもそも何の問題を解いているのか」から順に説明する。各章の最後に、実装しているコードの場所を書いた。
 
 - 基準コード: `upstream/main` e18ab3d87（2026-10-22）。行番号はすぐ古くなるので、関数名で探す。
-- plan engine そのものの説明は [plan-engine.md](./plan-engine.md)、処理の流れは [flow.md](./flow.md)、Go の並行処理は [concepts/go.md](../concepts/go.md) を参照。
+- plan engine そのものの説明は [plan-engine.md](./plan-engine.md)、処理の流れは [flow.md](./flow.md)、Go の並行処理は [concepts/go.md](../../../docker-doc/concepts/go.md) を参照。
 
 ← [document 一覧](../README.md)
 
@@ -246,7 +246,7 @@ Compose では 2 つの形で使っている。
 ## 6. 差分を取る（望ましい状態と実際の状態の比較）
 
 **解く問題**: compose.yaml に書かれた「こうあってほしい」と、Docker 上の「今こうなっている」を比べて、必要な操作だけを決めたい。
-これが Compose の中心（**宣言的**な動き。[concepts/intro.md](../concepts/intro.md#命令的-imperative-から宣言的-declarative-へ)）。
+これが Compose の中心（**宣言的**な動き。[concepts/intro.md](../../../docker-doc/concepts/intro.md#命令的-imperative-から宣言的-declarative-へ)）。
 
 ### 考え方は「2 つの集合の比較」
 

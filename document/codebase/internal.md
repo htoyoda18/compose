@@ -1,7 +1,7 @@
 # internal/ 配下の実装まわり
 
 `internal/` 配下の実装にかかわる概念（インメモリソケット、PID ファイル、実行時ディレクトリ、レジストリ、マニフェスト/blob、シンボリックリンク）。
-レジストリ・マニフェストそのものの一般的な仕組みは [concepts/oci.md](../concepts/oci.md)、
+レジストリ・マニフェストそのものの一般的な仕組みは [concepts/oci.md](../../../docker-doc/concepts/oci.md)、
 `internal/tracing` は [cli.md #トレーシング（OpenTelemetry）](./cli.md#トレーシングopentelemetry) を参照。
 
 ← [document 一覧](../README.md)

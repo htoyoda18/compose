@@ -2,7 +2,7 @@
 
 compose.yaml の仕様からリソース管理・収束処理・各種機能まで、Compose 固有の概念。
 各機能が実際にどう振る舞うか（depends_on、作り直しの判定、ラベル、読み込み順など）は [compose-lifecycle.md](./compose-lifecycle.md)。
-「なぜ Compose が必要か」「宣言的とは何か」という入門的な話は [intro.md](./intro.md) を参照。
+「なぜ Compose が必要か」「宣言的とは何か」という入門的な話は [intro.md](../../../docker-doc/concepts/intro.md) を参照。
 
 ← [document 一覧](../README.md)
 
@@ -36,7 +36,7 @@ compose.yaml の仕様からリソース管理・収束処理・各種機能ま�
 ## Project という単位
 
 - 「プロジェクト」= サービス集合 + 付随リソースの束
-- プロジェクト名はデフォルトでディレクトリ名（→ [intro.md #プロジェクトという単位](./intro.md#プロジェクトという単位)）
+- プロジェクト名はデフォルトでディレクトリ名（→ [intro.md #プロジェクトという単位](../../../docker-doc/concepts/intro.md#プロジェクトという単位)）
 
 ## ラベルによるリソース管理（状態 DB を持たない設計）
 
@@ -75,7 +75,7 @@ compose.yaml の仕様からリソース管理・収束処理・各種機能ま�
   - macOS: FSEvents 使用
   - Windows: 専用実装
   - Linux: 汎用実装
-- Mac で不安定になりやすい背景は [intro.md #Docker は Linux 上でしか動かない](./intro.md#docker-は-linux-上でしか動かない)
+- Mac で不安定になりやすい背景は [intro.md #Docker は Linux 上でしか動かない](../../../docker-doc/concepts/intro.md#docker-は-linux-上でしか動かない)
 
 ## Provider 拡張機構
 
@@ -95,7 +95,7 @@ compose.yaml の仕様からリソース管理・収束処理・各種機能ま�
     「ビルダーに選択を委ねる」ためリストを空にする分岐があるが、ビルダーが実際に
     選ぶプラットフォームが宣言済みリストに含まれているかは検証されない、という
     既知の検証漏れがある（`cmd/compose/options.go`のTODO、未対応。詳細な調査は [tracking/todo.md](../tracking/todo.md)）
-- ビルドエンジン（BuildKit / Buildx）は [docker-engine.md #BuildKit / Buildx](./docker-engine.md#buildkit--buildx)
+- ビルドエンジン（BuildKit / Buildx）は [docker-engine.md #BuildKit / Buildx](../../../docker-doc/concepts/docker-engine.md#buildkit--buildx)
 
 ## docker compose コマンド
 

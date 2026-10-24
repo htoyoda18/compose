@@ -73,4 +73,4 @@
   - プラグイン版は `docker` 本体からサブコマンド `compose` として呼び出される、現在推奨されている形態
   - `cmd/main.go` の `compatibility.Convert` がスタンドアロン形式の引数をプラグイン形式に変換し、内部的には同じ `RootCommand` で処理される
   - 両モードで同じバイナリを配布している（→ [development.md #リリース・バージョニング](./development.md#リリースバージョニング)）
-- 名前の整理（`docker-compose` v1 / `docker compose` v2 / compose-spec）は [concepts/intro.md #4](../concepts/intro.md#4-名前まわりの整理混乱しやすい点)
+- 名前の整理（`docker-compose` v1 / `docker compose` v2 / compose-spec）は [concepts/intro.md #4](../../../docker-doc/concepts/intro.md#4-名前まわりの整理混乱しやすい点)

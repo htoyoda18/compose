@@ -12,7 +12,7 @@ Web アプリを動かすには、アプリ本体・DB・ネットワーク・�
 
 Compose は、必要なリソースと依存関係を **compose.yaml に「どうあってほしいか」として宣言**し、
 `docker compose up` の 1 コマンドでその状態にする。手順を書く(命令的)のではなく、結果を書く(宣言的)。
-→ 具体的な `docker run` との比較は [intro.md §2, §3](./intro.md#2-なぜ-docker-だけでは足りないのか)
+→ 具体的な `docker run` との比較は [intro.md §2, §3](../../../docker-doc/concepts/intro.md#2-なぜ-docker-だけでは足りないのか)
 
 ## 2. Compose は自分で状態を持たない
 

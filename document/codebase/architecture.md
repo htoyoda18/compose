@@ -109,7 +109,7 @@ service.Up(ctx, project, api.UpOptions{})
 
 ## 並行処理パターン（errgroup 等）
 
-- `golang.org/x/sync/errgroup` を使い、複数 goroutine のエラーをまとめて収集しつつ並列実行する（errgroup 自体は [concepts/go.md #errgroup](../concepts/go.md#errgroup)）。
+- `golang.org/x/sync/errgroup` を使い、複数 goroutine のエラーをまとめて収集しつつ並列実行する（errgroup 自体は [concepts/go.md #errgroup](../../../docker-doc/concepts/go.md#errgroup)）。
 - サービスの並列起動・並列ビルド等、依存グラフ上で並列実行可能な単位ごとにこのパターンが使われる。
 - 1 つでもエラーが出れば context をキャンセルし、他の goroutine に中断を伝える設計。
 

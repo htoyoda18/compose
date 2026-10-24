@@ -11,21 +11,21 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 
 | ファイル | 内容 |
 | --- | --- |
-| [intro.md](./concepts/intro.md) | 入門: そもそも Docker とは何か / Docker Compose とは何か（前提知識ゼロから読む用） |
-| [intro-qa.md](./concepts/intro-qa.md) | intro.md を読んで出た疑問の Q&A（FE とコンテナ、apple/container、M1、Linux 一強、OCI、DB） |
-| [container-tech.md](./concepts/container-tech.md) | コンテナ基盤技術（namespace / cgroup / capability / chroot / overlayfs、Immutable Infrastructure） |
-| [container-tech-qa.md](./concepts/container-tech-qa.md) | container-tech.md を読んで出た疑問の Q&A（マウントの仕組み、mnt / uts / ipc、cgroup の上限超過、ファイルシステムとは、virtiofs、ホスト名） |
-| [networking.md](./concepts/networking.md) | ネットワーキング（bridge / veth / iptables / DNS、ネットワークドライバ） |
-| [networking-qa.md](./concepts/networking-qa.md) | networking.md を読んで出た疑問の Q&A（ネットワークドライバ、パケットフィルタリング、NAT、IP アドレスの割り振り、MAC と IP のレイヤー） |
-| [oci.md](./concepts/oci.md) | OCI 標準（Image / Runtime / Distribution Spec、1.1 と 1.0）、イメージのレイヤーとレジストリ |
-| [oci-qa.md](./concepts/oci-qa.md) | oci.md を読んで出た疑問の Q&A（manifest、digest、コンテナの起動の流れ、Dockerfile とレイヤー） |
-| [docker-engine.md](./concepts/docker-engine.md) | Docker エンジン（dockerd / containerd / runc、Engine API、BuildKit / Buildx、ボリュームドライバ） |
-| [docker-engine-qa.md](./concepts/docker-engine-qa.md) | docker-engine.md を読んで出た疑問の Q&A（dockerd の居場所、状態の保存先、shim、ボリュームの実体、ポートフォワード、BuildKit、rootless、セキュリティ） |
+| [intro.md](../../docker-doc/concepts/intro.md) | 入門: そもそも Docker とは何か / Docker Compose とは何か（前提知識ゼロから読む用） |
+| [intro-qa.md](../../docker-doc/concepts/intro-qa.md) | intro.md を読んで出た疑問の Q&A（FE とコンテナ、apple/container、M1、Linux 一強、OCI、DB） |
+| [container-tech.md](../../docker-doc/concepts/container-tech.md) | コンテナ基盤技術（namespace / cgroup / capability / chroot / overlayfs、Immutable Infrastructure） |
+| [container-tech-qa.md](../../docker-doc/concepts/container-tech-qa.md) | container-tech.md を読んで出た疑問の Q&A（マウントの仕組み、mnt / uts / ipc、cgroup の上限超過、ファイルシステムとは、virtiofs、ホスト名） |
+| [networking.md](../../docker-doc/concepts/networking.md) | ネットワーキング（bridge / veth / iptables / DNS、ネットワークドライバ） |
+| [networking-qa.md](../../docker-doc/concepts/networking-qa.md) | networking.md を読んで出た疑問の Q&A（ネットワークドライバ、パケットフィルタリング、NAT、IP アドレスの割り振り、MAC と IP のレイヤー） |
+| [oci.md](../../docker-doc/concepts/oci.md) | OCI 標準（Image / Runtime / Distribution Spec、1.1 と 1.0）、イメージのレイヤーとレジストリ |
+| [oci-qa.md](../../docker-doc/concepts/oci-qa.md) | oci.md を読んで出た疑問の Q&A（manifest、digest、コンテナの起動の流れ、Dockerfile とレイヤー） |
+| [docker-engine.md](../../docker-doc/concepts/docker-engine.md) | Docker エンジン（dockerd / containerd / runc、Engine API、BuildKit / Buildx、ボリュームドライバ） |
+| [docker-engine-qa.md](../../docker-doc/concepts/docker-engine-qa.md) | docker-engine.md を読んで出た疑問の Q&A（dockerd の居場所、状態の保存先、shim、ボリュームの実体、ポートフォワード、BuildKit、rootless、セキュリティ） |
 | [how-compose-works.md](./concepts/how-compose-works.md) | Compose が動く仕組み（web + db の例で、ラベルによる現状把握と差分埋めを初回 up / 再 up / down の順に追う） |
 | [compose-concepts.md](./concepts/compose-concepts.md) | Compose 特有の概念（compose-spec、3 レイヤ、ラベル、収束処理、依存グラフ、watch、provider、コマンド一覧） |
 | [compose-lifecycle.md](./concepts/compose-lifecycle.md) | Compose の意味論（depends_on、healthcheck、フック、作り直しの判定と config hash、ラベル、読み込み順と環境変数、ボリューム、ネットワーク、run、停止と終了コード） |
-| [go.md](./concepts/go.md) | Go 言語（goroutine / channel / errgroup / context / interface / error wrapping / modules） |
-| [go-qa.md](./concepts/go-qa.md) | go.md を読んで出た疑問の Q&A（goroutine leak、buffered channel、他言語のキャンセル、Go の設計思想、go.mod / go.sum） |
+| [go.md](../../docker-doc/concepts/go.md) | Go 言語（goroutine / channel / errgroup / context / interface / error wrapping / modules） |
+| [go-qa.md](../../docker-doc/concepts/go-qa.md) | go.md を読んで出た疑問の Q&A（goroutine leak、buffered channel、他言語のキャンセル、Go の設計思想、go.mod / go.sum） |
 
 ## codebase/ — このリポジトリ（docker/compose）の構成
 
