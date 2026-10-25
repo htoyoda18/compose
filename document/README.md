@@ -38,6 +38,7 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [algorithms.md](./codebase/algorithms.md) | Compose で使われているアルゴリズム入門（グラフ、循環検出、依存順の並列処理、DAG の実行、セマフォ、差分、ハッシュ、デバウンス、連番）。前提知識なしで読める |
 | [plan-engine.md](./codebase/plan-engine.md) | plan engine（観測 → 計画 → 実行）。`up` などが差分を埋める仕組みと、どのコマンドがそれを通るか |
 | [cli.md](./codebase/cli.md) | CLI 実装（cobra、トレーシング / OpenTelemetry、Docker コンテキスト、プラグイン版 / スタンドアロン版） |
+| [cli-qa.md](./codebase/cli-qa.md) | cli.md を読んで出た疑問の Q&A（Docker コンテキストと moby、プラグイン版になった理由） |
 | [internal.md](./codebase/internal.md) | internal/ 配下（インメモリソケット、PID ファイル、実行時ディレクトリ、レジストリ、マニフェスト / blob、シンボリックリンク） |
 | [development.md](./codebase/development.md) | ビルド・テスト（E2E Scenario DSL）・Lint / CI・リリース |
 | [reading-guide.md](./codebase/reading-guide.md) | コードを読む順番 |

@@ -2,6 +2,8 @@
 
 `cmd/` 配下の CLI 実装にかかわる概念（cobra、トレーシング、Docker コンテキスト、プラグイン版/スタンドアロン版）。
 
+読んで出た疑問の Q&A は [cli-qa.md](./cli-qa.md)。
+
 ← [document 一覧](../README.md)
 
 ## cobra
