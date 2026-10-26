@@ -6,6 +6,8 @@ compose.yaml の仕様からリソース管理・収束処理・各種機能ま�
 
 ← [document 一覧](../README.md)
 
+読んで出た疑問の Q&A は [compose-concepts-qa.md](./compose-concepts-qa.md)。
+
 ## compose-spec と compose-go
 
 - **compose-spec（compose.yaml 仕様）**
@@ -123,4 +125,3 @@ compose.yaml の仕様からリソース管理・収束処理・各種機能ま�
 - oneOff
   - `docker compose run` で起動される、一時的・使い捨てのコンテナを指す概念
 - IO ストリームと TTY
-- docker compose コマンドの解説チャット: https://chatgpt.com/c/695374b5-06e8-8324-97b3-f423942ba35a

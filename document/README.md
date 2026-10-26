@@ -23,6 +23,7 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [docker-engine-qa.md](../../docker-doc/concepts/docker-engine-qa.md) | docker-engine.md を読んで出た疑問の Q&A（dockerd の居場所、状態の保存先、shim、ボリュームの実体、ポートフォワード、BuildKit、rootless、セキュリティ） |
 | [how-compose-works.md](./concepts/how-compose-works.md) | Compose が動く仕組み（web + db の例で、ラベルによる現状把握と差分埋めを初回 up / 再 up / down の順に追う） |
 | [compose-concepts.md](./concepts/compose-concepts.md) | Compose 特有の概念（compose-spec、3 レイヤ、ラベル、収束処理、依存グラフ、watch、provider、コマンド一覧） |
+| [compose-concepts-qa.md](./concepts/compose-concepts-qa.md) | compose-concepts.md を読んで出た疑問の Q&A（YAML 自体の挙動、プロジェクト名の決まり方、サービスとコンテナの数、トポロジカルソート、provider の使い方） |
 | [compose-lifecycle.md](./concepts/compose-lifecycle.md) | Compose の意味論（depends_on、healthcheck、フック、作り直しの判定と config hash、ラベル、読み込み順と環境変数、ボリューム、ネットワーク、run、停止と終了コード） |
 | [go.md](../../docker-doc/concepts/go.md) | Go 言語（goroutine / channel / errgroup / context / interface / error wrapping / modules） |
 | [go-qa.md](../../docker-doc/concepts/go-qa.md) | go.md を読んで出た疑問の Q&A（goroutine leak、buffered channel、他言語のキャンセル、Go の設計思想、go.mod / go.sum） |
