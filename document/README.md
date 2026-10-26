@@ -54,6 +54,14 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [pr-trends.md](./contributing/pr-trends.md) | 直近のクローズ済み PR 150 件と main のコミット履歴の調査。どんな PR がマージされ／閉じられているか、コミットの積み方 |
 | [pr-review-patterns.md](./contributing/pr-review-patterns.md) | 自分が出した PR のレビュー指摘の傾向分析と対策 |
 
+## quiz/ — 問題集
+
+読んだことを自分でテストして思い出すための問題集。docker-doc の問題集も含めて、roadmap の段階の順に [quiz/README.md](./quiz/README.md) に並べている。
+
+| ファイル | 内容 |
+| --- | --- |
+| [README.md](./quiz/README.md) | 使い方、問題の種類(説明 / 予想 / 場所 / 穴埋め)、一覧、収録の方針 |
+
 ## tracking/ — 調査状況・タスク候補（随時更新）
 
 | ファイル | 内容 |
@@ -62,3 +70,4 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [issues.md](./tracking/issues.md) | 個別 issue の調査状況 |
 | [todo.md](./tracking/todo.md) | リポジトリ内 TODO コメントの調査状況 |
 | [fixme.md](./tracking/fixme.md) | リポジトリ内 FIXME コメントの調査状況（随時再スキャンして更新） |
+| [quiz-plan.md](./tracking/quiz-plan.md) | 問題集の計画（置き場所、問題の種類、1 問の形式、章立て、Q0〜Q11 のタスクと状態） |
