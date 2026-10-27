@@ -7,6 +7,7 @@
 プロジェクトを本当に良くするタスク」を探した結果。
 
 - 調査日: 2026-10-03（初回）、2026-10-16（再調査）、2026-10-20（第 3 回）、2026-10-22（[新機能の候補](#新機能の候補2026-10-22)）
+- 進捗の更新: 2026-10-28（自分の PR と issue の状態。下の「進行中」の節）
 - 基準コード: `upstream/main` 289d8a037（2026-10-16）。最新リリースは v5.6.0（10-02）で、そこから main までに**未リリースのコミットが 127 件**ある（plan engine の大きな変更を含む）
   - 前回までの節（1〜13）のコードリンクは、当時の 7b36d08dd を指したまま。第 3 回の節（N1〜N17）の行番号は 289d8a037 のもの
 - 調べたもの:
@@ -39,18 +40,29 @@
 
 ## 進行中（自分の PR と issue）
 
-| 対象 | 状態（2026-10-22） | 次の一手 | 詳細 |
-| ---- | ------------------ | -------- | ---- |
-| ✅ issue [#14373](https://github.com/docker/compose/issues/14373) + PR [#14374](https://github.com/docker/compose/pull/14374) `down -v` が他のプロジェクトのボリュームを消す（N2） | **2026-10-26 にマージ**（ndeloof が APPROVED。10-22 の指摘 2 つへの対応の後、追加の指摘なし） | なし。同じ「`down -v` が消しすぎる」の [N7](#n7-down--v-でサービスを指定すると依存先の名前付きボリュームが消える) に話をつなげやすい | [N2](#n2-down--v-が同じ名前を持つ別のプロジェクトのボリュームを消す)、[pr-14374.md](../../pr/pr-14374.md) |
-| issue [#14372](https://github.com/docker/compose/issues/14372) 起動の失敗が無関係なサービスの起動まで止める（N1） | kind/bug。ndeloof が実機で再現。**「フェーズ全体を止めるのは意図どおり。問題は報告の仕方」**という判断 | 方針が変わった（N1 の節）。ndeloof の返答を受けて、報告の修正を自分がやるか聞くかを決める | [N1](#n1-起動の失敗が無関係なサービスの起動まで止める) |
-| PR [#14310](https://github.com/docker/compose/pull/14310) down のフック後始末 | APPROVED。CI の実行承認待ち（10-17 から動き無し） | 待つ。ブランチは触らない | [5](#5-down-の-pre_start-フックコンテナ後始末) |
-| ✅ PR [#14351](https://github.com/docker/compose/pull/14351) CI の偽の FAIL | **2026-10-22 にマージ**（ndeloof） | 急がない指摘 1 つ（cleanup で元の値に戻す）のフォローアップは任意 | [1](#1-ci-の-unit-テストで毎回-1-件の偽の-fail-が出る)、[pr-14351.md](../../pr/pr-14351.md) |
-| ✅ PR [#14358](https://github.com/docker/compose/pull/14358) `run` の匿名ボリューム（issue #14357） | **2026-10-20 にマージ**（ndeloof） | 急がない指摘 2 つ（`api.go` の古いコメント、testdata の説明）のフォローアップ。`scale` の同じバグ（[N10](#n10-scale-も匿名ボリュームを引き継がない)） | [2](#2-run-が依存サービスを作り直すと匿名ボリュームを引き継がない)、[pr-14358.md](../../pr/pr-14358.md) |
-| ✅ PR [#14363](https://github.com/docker/compose/pull/14363) watch の `.git`（issue #14362） | **2026-10-20 にマージ**（ndeloof、指摘なし） | 同じ種類の [N6](#n6-許可リスト型の-dockerignore-で-watch-が無視のルールを全部捨てる) | [3](#3-watch-の監視中に-git-が除外されない)、[pr-14363.md](../../pr/pr-14363.md) |
-| PR [#14284](https://github.com/docker/compose/pull/14284) `ensureModels` | CHANGES_REQUESTED（上流の修正の配布待ち） | apt に新しい docker-model が出たら rebase | [8](#8-ensuremodels-のエラー無視とデータ競合) |
-| issue [#14311](https://github.com/docker/compose/issues/14311) `start -p` | open、反応無し | [保留](#保留メンテナの方針と合わなかったもの) | — |
-| PR [#14244](https://github.com/docker/compose/pull/14244) `run --env-from-file` の解析エラーを握りつぶす | REVIEW_REQUIRED（10-15 から動き無し） | 待つ | — |
+### 開いているもの（2026-10-28）
+
+| 対象 | 状態 | 次の一手 | 詳細 |
+| ---- | ---- | -------- | ---- |
+| PR [#14310](https://github.com/docker/compose/pull/14310) down のフック後始末 | APPROVED。10-27 に main へ rebase し、承認された 1 コミットに戻した（差分は同じ）。CI の実行承認とマージ待ち | 待つ。ブランチは触らない | [5](#5-down-の-pre_start-フックコンテナ後始末) |
+| PR [#14284](https://github.com/docker/compose/pull/14284) `ensureModels` | CHANGES_REQUESTED。10-27 に、上流の修正（docker/model-runner#1079）が `docker-model-plugin` 1.2.9 として apt に出たことを伝え、main へ rebase。CI の実行承認を依頼済み | `TestComposeModel` が 1.2.9 で通るかを見て、再レビューを待つ | [8](#8-ensuremodels-のエラー無視とデータ競合) |
+| issue [#14372](https://github.com/docker/compose/issues/14372) 起動の失敗が無関係なサービスの起動まで止める（N1） | kind/bug。ndeloof が実機で再現。**「フェーズ全体を止めるのは意図どおり。問題は報告の仕方」**という判断（10-22 から動き無し） | ndeloof の返答を受けて、報告の修正を自分がやるか聞くかを決める | [N1](#n1-起動の失敗が無関係なサービスの起動まで止める) |
+| PR [#14244](https://github.com/docker/compose/pull/14244) `run --env-from-file` の解析エラーを握りつぶす | REVIEW_REQUIRED（10-15 の rebase から動き無し） | 待つ | — |
 | PR [#14053](https://github.com/docker/compose/pull/14053) `--dry-run` を進捗表示に渡す | REVIEW_REQUIRED（09-26 から動き無し） | 待つ。長く止まっているので、状況を一度だけ確認してもよい | [pr-14053.md](../../pr/pr-14053.md) |
+| issue [#14311](https://github.com/docker/compose/issues/14311) `start -p` | open、反応無し（10-08 から） | [保留](#保留メンテナの方針と合わなかったもの) | — |
+
+### 第 3 回の調査（10-20）以降にマージされたもの
+
+どれも ndeloof がマージした。
+
+| 日付 | 対象 | 残っていること | 詳細 |
+| ---- | ---- | -------------- | ---- |
+| 10-27 | ✅ issue [#14384](https://github.com/docker/compose/issues/14384) + PR [#14385](https://github.com/docker/compose/pull/14385) 依存の待ちが必ず 500 ミリ秒かかる（N3） | なし。CHANGES_REQUESTED の後、main との衝突の解き方とテスト（`synctest.Test` で最初の確認のタイミングを固定）を指摘どおりに直して APPROVED | [N3](#n3-依存の待ちが必ず-500-ミリ秒かかる) |
+| 10-27 | ✅ issue [#14394](https://github.com/docker/compose/issues/14394) + PR [#14395](https://github.com/docker/compose/pull/14395) `up -t` が Ctrl-C と `--abort-on-container-exit` で効かない（N4） | なし（指摘なしで APPROVED） | [N4](#n4-up--t-が-ctrl-c-と---abort-on-container-exit-で効かない) |
+| 10-26 | ✅ issue [#14373](https://github.com/docker/compose/issues/14373) + PR [#14374](https://github.com/docker/compose/pull/14374) `down -v` が他のプロジェクトのボリュームを消す（N2） | なし。同じ「`down -v` が消しすぎる」の [N7](#n7-down--v-でサービスを指定すると依存先の名前付きボリュームが消える) に話をつなげやすい | [N2](#n2-down--v-が同じ名前を持つ別のプロジェクトのボリュームを消す)、[pr-14374.md](../../pr/pr-14374.md) |
+| 10-22 | ✅ PR [#14351](https://github.com/docker/compose/pull/14351) CI の偽の FAIL | 急がない指摘 1 つ（cleanup で元の値に戻す）のフォローアップは任意 | [1](#1-ci-の-unit-テストで毎回-1-件の偽の-fail-が出る)、[pr-14351.md](../../pr/pr-14351.md) |
+| 10-20 | ✅ issue [#14357](https://github.com/docker/compose/issues/14357) + PR [#14358](https://github.com/docker/compose/pull/14358) `run` の匿名ボリューム | 急がない指摘 2 つ（`api.go` の古いコメント、testdata の説明）のフォローアップ。`scale` の同じバグ（[N10](#n10-scale-も匿名ボリュームを引き継がない)） | [2](#2-run-が依存サービスを作り直すと匿名ボリュームを引き継がない)、[pr-14358.md](../../pr/pr-14358.md) |
+| 10-20 | ✅ issue [#14362](https://github.com/docker/compose/issues/14362) + PR [#14363](https://github.com/docker/compose/pull/14363) watch の `.git` | 同じ種類の [N6](#n6-許可リスト型の-dockerignore-で-watch-が無視のルールを全部捨てる) | [3](#3-watch-の監視中に-git-が除外されない)、[pr-14363.md](../../pr/pr-14363.md) |
 
 ## 結論（2026-10-20 時点で先にやる順）
 
@@ -61,8 +73,8 @@
 | 1 | [N1 起動の失敗が無関係なサービスの起動まで止める](#n1-起動の失敗が無関係なサービスの起動まで止める) | **未リリースの退行** | 次のリリースを使う全員。ポートの衝突などで、直前まで動いていたサービスが止まったまま残る | **実機** | 修正は設計判断 | 高（plan engine） | ✅ issue #14372 を報告済み。止めるのは意図どおりで、**報告の仕方を直す**方針に（N1 の節） |
 | 2 | [S1 セキュリティに関わる発見](#s1-セキュリティに関わる発見) | セキュリティ | （非公開） | 実機（調査）+ コード | XS | — | security@docker.com に**非公開で**報告。公開の issue や PR にしない |
 | 3 | [N2 `down -v` が同じ名前を持つ別のプロジェクトのボリュームを消す](#n2-down--v-が同じ名前を持つ別のプロジェクトのボリュームを消す) | **データ消失** | 同じリポジトリを複数の worktree やディレクトリで動かす人など | **実機** | XS〜S | 低〜中 | ✅ PR #14374 が 10-26 にマージ |
-| 4 | [N3 依存の待ちが必ず 500 ミリ秒かかる](#n3-依存の待ちが必ず-500-ミリ秒かかる) | 性能 | `depends_on` の healthy / completed を使う全員。`up -d` 0.8 → 0.2 秒、`up --wait` 約 −1 秒 | 実機（調査）+ コード | XS | 中（#14308） | 数字を付けて issue → PR |
-| 5 | [N4 `up -t` が Ctrl-C と `--abort-on-container-exit` で効かない](#n4-up--t-が-ctrl-c-と---abort-on-container-exit-で効かない) | バグ | CI の `--abort-on-container-exit --exit-code-from` の利用者 | 実機（調査）+ コード | XS | 中（#14305） | issue → PR |
+| 4 | [N3 依存の待ちが必ず 500 ミリ秒かかる](#n3-依存の待ちが必ず-500-ミリ秒かかる) | 性能 | `depends_on` の healthy / completed を使う全員。`up -d` 0.8 → 0.2 秒、`up --wait` 約 −1 秒 | 実機（調査）+ コード | XS | 中（#14308） | ✅ PR #14385 が 10-27 にマージ |
+| 5 | [N4 `up -t` が Ctrl-C と `--abort-on-container-exit` で効かない](#n4-up--t-が-ctrl-c-と---abort-on-container-exit-で効かない) | バグ | CI の `--abort-on-container-exit --exit-code-from` の利用者 | 実機（調査）+ コード | XS | 中（#14305） | ✅ PR #14395 が 10-27 にマージ |
 | 6 | [N5 名前付き context で選んだ buildx の builder が無視される](#n5-名前付き-context-で選んだ-buildx-の-builder-が無視される) | バグ | Docker Desktop などで builder を選ぶ人。Docker Build Cloud の公式の手順 | 実機（調査）+ コード | S | 低 | issue（過去の往復を踏まえ、3 ケースの表を付ける） |
 | 7 | [N6 許可リスト型の `.dockerignore` で watch が無視のルールを全部捨てる](#n6-許可リスト型の-dockerignore-で-watch-が無視のルールを全部捨てる) | バグ（再ビルドが止まらない） | `*` + `!src` 型の `.dockerignore` と watch を使う人（Node / Python で一般的） | 実機（調査。2 つの調査が別々に発見）+ コード | S〜M | 低 | issue → PR（#14363 が通ってから出すと話が早い） |
 | 8 | [N7 `down -v` でサービスを指定すると依存先の名前付きボリュームが消える](#n7-down--v-でサービスを指定すると依存先の名前付きボリュームが消える) | **データ消失** | `down -v <svc>` を使う人（依存先のコンテナが無いとき） | **実機** | S〜M | 低〜中 | issue（直し方を 2 案から選んでもらう） |
@@ -94,7 +106,7 @@
 
 - **1 と 2 だけは急ぐ**。1 は次のリリース（v5.6.0 の次）に入る前に知らせる価値が最も大きい。2 はセキュリティなので、必ず非公開の窓口で。
 - **3〜13 は、どれも「まだ報告されていない問題」**。AI_POLICY.md の「No contribution farming」は、未報告の問題について AI を使った PR を出す前に、issue でメンテナに必要性を確かめてもらい、承認を得ることを求めている。だから順番は必ず「issue → 承認 → PR」。
-- **メンテナの注意は限られている**。自分の PR は 3 本開いている（10-20 に 2 本マージされた）。新しい issue は 1〜2 件ずつ、反応を見ながら出す。規模に対する効果が最も大きいのは、データ消失の N2 と、性能の N3。
+- **メンテナの注意は限られている**。自分の PR は 4 本開いている（10-28 時点。10-20 以降に 6 本マージされた）。新しい issue は 1〜2 件ずつ、反応を見ながら出す。上位のうち、データ消失の N2 と性能の N3、バグの N4 はマージ済み。
 - **plan engine の中のもの（N1、N8、N9）は、issue に再現手順と原因の場所を書くところまで**。直し方は ndeloof の判断に任せる。
 - 「その次」の表は、上位が片付いてから。
 
@@ -274,6 +286,7 @@
 - **既存**: 無し。
 - **衝突**: 中。ndeloof が 10-06 にこの関数を 2 回変えている（7849a5091、ebe25e323）。統合ブランチ #14308 が関数の引数を変える。差分は数行。
 - **最初の一手**: 数字を付けて issue → PR。
+- **進捗（2026-10-27）**: issue [#14384](https://github.com/docker/compose/issues/14384) → PR [#14385](https://github.com/docker/compose/pull/14385) を出し、**マージされた**（ndeloof）。途中で CHANGES_REQUESTED があり、main との衝突の解き方と、最初の確認のタイミングを `synctest.Test` で固定するテストを指摘どおりに直した。
 
 ## N4. up -t が Ctrl-C と --abort-on-container-exit で効かない
 
@@ -286,6 +299,7 @@
 - **既存**: 無し。
 - **衝突**: 中（draft の #14305 が `up.go` を大きく変えるが、この 2 つの関数は触らない）。
 - **最初の一手**: issue → PR。
+- **進捗（2026-10-27）**: issue [#14394](https://github.com/docker/compose/issues/14394) → PR [#14395](https://github.com/docker/compose/pull/14395) を出し、指摘なしで**マージされた**（ndeloof）。
 
 ## N5. 名前付き context で選んだ buildx の builder が無視される
 
