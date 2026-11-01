@@ -25,6 +25,7 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [compose-concepts.md](./concepts/compose-concepts.md) | Compose 特有の概念（compose-spec、3 レイヤ、ラベル、収束処理、依存グラフ、watch、provider、コマンド一覧） |
 | [compose-concepts-qa.md](./concepts/compose-concepts-qa.md) | compose-concepts.md を読んで出た疑問の Q&A（YAML 自体の挙動、プロジェクト名の決まり方、サービスとコンテナの数、トポロジカルソート、provider の使い方） |
 | [compose-lifecycle.md](./concepts/compose-lifecycle.md) | Compose の意味論（depends_on、healthcheck、フック、作り直しの判定と config hash、ラベル、読み込み順と環境変数、ボリューム、ネットワーク、run、停止と終了コード） |
+| [compose-lifecycle-qa.md](./concepts/compose-lifecycle-qa.md) | compose-lifecycle.md を読んで出た疑問の Q&A（compose-go との関係、healthcheck を実行するのは dockerd、config hash の理由、diverged と never、slug、ネットワークの中身） |
 | [go.md](../../docker-doc/concepts/go.md) | Go 言語（goroutine / channel / errgroup / context / interface / error wrapping / modules） |
 | [go-qa.md](../../docker-doc/concepts/go-qa.md) | go.md を読んで出た疑問の Q&A（goroutine leak、buffered channel、他言語のキャンセル、Go の設計思想、go.mod / go.sum） |
 
@@ -51,7 +52,7 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | --- | --- |
 | [README.md](./contributing/README.md) | コントリビューションの基本作法（Git / DCO / フロー） |
 | [checklist.md](./contributing/checklist.md) | PR を出す前のチェックリスト（下の 2 つから統合） |
-| [pr-trends.md](./contributing/pr-trends.md) | 直近のクローズ済み PR 150 件と main のコミット履歴の調査。どんな PR がマージされ／閉じられているか、コミットの積み方 |
+| [pr-trends.md](./contributing/pr-trends.md) | 直近のクローズ済み PR 150 件と main のコミット履歴の調査。どんな PR がマージされ／閉じられているか、コミットの積み方、自分の実績とメンテナとの信頼関係 |
 | [pr-review-patterns.md](./contributing/pr-review-patterns.md) | 自分が出した PR のレビュー指摘の傾向分析と対策 |
 
 ## quiz/ — 問題集
@@ -61,6 +62,8 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | ファイル | 内容 |
 | --- | --- |
 | [README.md](./quiz/README.md) | 使い方、問題の種類(説明 / 予想 / 場所 / 穴埋め)、一覧、収録の方針 |
+| [01-overview.md](./quiz/01-overview.md) | 1. 全体像(how-compose-works.md、overview.md、architecture.md、ルートの note.md) |
+| [02-cli-to-backend.md](./quiz/02-cli-to-backend.md) | 2. コマンドが本体に届くまで(flow.md の共通の流れ、cli.md、cmd / pkg/api のノートと、その Q&A) |
 
 ## tracking/ — 調査状況・タスク候補（随時更新）
 

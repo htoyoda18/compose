@@ -2,6 +2,8 @@
 
 ← [document 一覧](../README.md)
 
+読んで出た疑問の Q&A は [compose-lifecycle-qa.md](./compose-lifecycle-qa.md)。
+
 compose.yaml の各機能が、実際にどう振る舞うか。依存、ヘルスチェック、作り直しの判定、ラベル、読み込みの順番、ボリューム、停止の仕方を、コードの場所つきでまとめる。
 概念の入口は [compose-concepts.md](./compose-concepts.md)、差分を埋める仕組みは [codebase/plan-engine.md](../codebase/plan-engine.md) を参照。
 
