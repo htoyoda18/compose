@@ -107,7 +107,7 @@ roadmap の段階に合わせる。目安は 1 章 10〜15 問。
 | Q1 | docker-doc 1. 入門 | `docker-doc/quiz/01-intro.md` | ✅ 2026-10-27 |
 | Q2 | compose 1. 全体像 | `compose/document/quiz/01-overview.md` | ✅ 2026-11-01 |
 | Q3 | compose 2. コマンドが本体に届くまで | `compose/document/quiz/02-cli-to-backend.md` | ✅ 2026-11-01 |
-| Q4 | compose 3. 概念と意味論 | `compose/document/quiz/03-concepts.md` | |
+| Q4 | compose 3. 概念と意味論 | `compose/document/quiz/03-concepts.md` | ✅ 2026-11-03 |
 | Q5 | compose 4. plan engine | `compose/document/quiz/04-plan-engine.md` | |
 | Q6 | docker-doc 2. Docker Engine | `docker-doc/quiz/02-engine.md` | |
 | Q7 | docker-doc 3〜5(コンテナの基盤、ネットワーク、イメージと OCI)。1 章ずつ | `docker-doc/quiz/03〜05` | |

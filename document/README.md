@@ -7,6 +7,8 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 
 **読む順番は [roadmap.md](./roadmap.md) を参照**(概念・コード解説・コードノートを段階ごとに混ぜて並べている)。
 
+**言葉が分からなくなったら [glossary.md](./glossary.md)**(compose 固有の用語辞典。Docker 全般の言葉は [docker-doc/glossary.md](../../docker-doc/glossary.md))。
+
 ## concepts/ — 一般的な概念（このリポジトリに依存しない）
 
 | ファイル | 内容 |
@@ -64,6 +66,7 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 | [README.md](./quiz/README.md) | 使い方、問題の種類(説明 / 予想 / 場所 / 穴埋め)、一覧、収録の方針 |
 | [01-overview.md](./quiz/01-overview.md) | 1. 全体像(how-compose-works.md、overview.md、architecture.md、ルートの note.md) |
 | [02-cli-to-backend.md](./quiz/02-cli-to-backend.md) | 2. コマンドが本体に届くまで(flow.md の共通の流れ、cli.md、cmd / pkg/api のノートと、その Q&A) |
+| [03-concepts.md](./quiz/03-concepts.md) | 3. 概念と意味論(compose-concepts.md、compose-lifecycle.md と、その Q&A) |
 
 ## tracking/ — 調査状況・タスク候補（随時更新）
 
