@@ -33,7 +33,7 @@ compose.yaml の各機能が、実際にどう振る舞うか。依存、ヘル�
 - **止める順番**: `stop` と `down` は依存の逆順（`InReverseDependencyOrder`）。
 - **サービスを指定したときの範囲**（`down web` など。10-20 に訂正）: compose ファイルを読むかどうかで違う。
   - compose ファイルを読む場合: モデルが「指定したサービスと、その**依存先**」に絞られる（`WithSelectedServices`）。そのため、web の依存元は止まらない。
-    しかも `-v` を付けると、絞ったモデルにある依存先（db など）の名前付きボリュームまで消そうとする（[next-tasks.md の N7](../tracking/next-tasks.md#n7-down--v-でサービスを指定すると依存先の名前付きボリュームが消える)）。
+    しかも `-v` を付けると、絞ったモデルにある依存先（db など）の名前付きボリュームまで消そうとする（[#14449](../../pr/pr-14449.md)）。
   - `-p` だけで実行する場合（ラベルから組み立て直す）: **依存元も止める**（`WithRootNodesAndDown`）。
 - **暗黙の depends_on**: compose-go が、次の参照から自動で `service_started` の依存を足す。
   - `links`、`network_mode: service:x`、`ipc` / `pid` / `uts` / `cgroup` の `service:`（`restart: true` 付き）
@@ -115,7 +115,7 @@ compose.yaml の各機能が、実際にどう振る舞うか。依存、ヘル�
 - 作り直すとき、`Inherit` が true なら、古いコンテナの匿名ボリュームを新しいコンテナに付け直す（`reconcile.go:1629-1632` → `buildContainerMountOptions`、`create.go:1159-1203`）。
   - 対象は、イメージの `VOLUME` と、compose.yaml で source を書かなかったボリューム。
 - `up` / `create` では `Inherit = !-V`。
-- **`run` の依存サービスでは渡していない** → postgres などのデータが消えたように見える（[next-tasks.md の 2](../tracking/next-tasks.md#2-run-が依存サービスを作り直すと匿名ボリュームを引き継がない)）。
+- **`run` の依存サービスでは渡していない** → postgres などのデータが消えたように見える（[#14358 で修正済み](../../pr/pr-14358.md)）。
 - 作り直しは「一時的な名前で作成 → 古いものを止める → 消す → 名前を変える」の 4 段階（[plan-engine.md](../codebase/plan-engine.md#作り直しは-4-つの操作に分かれる)）。
 
 ## 6. ラベル（`com.docker.compose.*`）
@@ -228,8 +228,8 @@ compose.yaml の各機能が、実際にどう振る舞うか。依存、ヘル�
   - `-d` / `--wait` と、これらのフラグは同時に使えない。
 - **気付いた点**（推定・未報告）:
   - Ctrl-C で止めるとき（`stopApplication`）は timeout を渡していない。そのため、**`up -t` は Ctrl-C のときと `--abort-on-container-exit` のときには効かない**。
-    10-20 に実機で確認（v2.0.0 から。[next-tasks.md の N4](../tracking/next-tasks.md#n4-up--t-が-ctrl-c-と---abort-on-container-exit-で効かない)）。
+    10-20 に実機で確認（v2.0.0 から。[#14395 で修正済み](../../pr/pr-14395.md)）。
   - `--abort-on-container-exit` は、restart ポリシーで再起動中のコンテナが死んだときにも止める（`Restarting` を見ていない）。10-20 に実機で確認したが、昔からの挙動で、メンテナも「理由を問わず止まることを期待する利用者がいる」という立場なので、設計どおりと判断した。
   - `compose wait` の終了コードを、複数の goroutine がロック無しで書いている（データ競合）。10-20 に `go test -race` で確認。
   - Ctrl-C を 1 回送っただけで、まれに（実機で 112 回中 3 回）即座に kill される。同じシグナルを 2 か所で受け取っているため（10-20 の調査）。
-- **依存の待ちの速さ**: `depends_on` の `service_healthy` などを待つとき、依存先がすでに healthy でも、最初の確認まで 500 ミリ秒待つ（`waitDependency` が ticker を先に待つ。[N3](../tracking/next-tasks.md#n3-依存の待ちが必ず-500-ミリ秒かかる)）。
+- **依存の待ちの速さ**: `depends_on` の `service_healthy` などを待つとき、依存先がすでに healthy でも、最初の確認まで 500 ミリ秒待つ（`waitDependency` が ticker を先に待つ。[#14385 で修正済み](../../pr/pr-14385.md)）。

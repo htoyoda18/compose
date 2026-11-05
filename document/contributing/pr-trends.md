@@ -216,6 +216,10 @@ glours はテンプレートの旧版に近い `**What I did**` / `**Related iss
 - **AI_POLICY.md:「AI の `Co-Authored-By` トレーラーは付けない」**。開示はコミットではなく PR の説明に書く。
   メンテナのコミットに Claude のトレーラーがあるのは「この規則は外部からのコントリビューションに適用する」という例外のため（§5-4）。
 - PR を開く前に `AI_AGENT_DISCLOSURE.md` を、自分でレビューした上で削除する（上の 7）。
+- **未報告の問題は「issue → 承認 → PR」の順**。AI_POLICY.md の「No contribution farming」は、未報告の問題について AI を使った PR を出す前に、issue でメンテナに必要性を確かめてもらうことを求めている。新しい issue は 1〜2 件ずつ、反応を見ながら出す。
+- **fork からの PR は、push し直すたびに、CI を動かすのにメンテナの承認が要る**。承認後に main を merge すると、auto-merge が外れる（#14310）。承認をもらったら、ブランチはできるだけ触らない。
+- **外部の依存（docker-model など）が CI にどう入るかは、GitHub のリリースではなく CI のインストール経路（`ci.yml`）で確かめる**（#14284）。
+- **セキュリティの発見は、公開の issue や PR にしない**。CONTRIBUTING.md の「Reporting security issues」に従って security@docker.com へ。公開リポジトリに置くメモにも詳細を書かない。
 
 > 自分の作業ブランチ (`toyo/study`) の `CLAUDE.md` は upstream より古い。upstream の `AGENTS.md` には
 > 「All agents must conform to AI_POLICY.md」と「Keep changes scoped to the task」が追加されている。

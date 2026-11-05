@@ -72,7 +72,8 @@ Docker Compose リポジトリを学習・調査した際の個人メモ置き�
 
 | ファイル | 内容 |
 | --- | --- |
-| [next-tasks.md](./tracking/next-tasks.md) | pr-trends.md の基準で選んだ、まだ誰も着手していないタスク候補（進行中の自分の PR、上位 13 件とその次の 13 件、保留・次点・見守るもの・やらないもの。2026-10-20 の第 3 回調査で更新） |
+| [next-tasks.md](./tracking/next-tasks.md) | pr-trends.md の基準で選んだタスク候補（進行中の自分の PR と issue、候補、調査のタスク、新機能、次点・保留・見守るもの・やらないもの、完了） |
+| [investigation.md](./tracking/investigation.md) | バグの探し方（クリティカルさの物差し、狙う場所、定点観測・バグの型・攻撃面の方針、調べるときの注意、道具） |
 | [issues.md](./tracking/issues.md) | 個別 issue の調査状況 |
 | [todo.md](./tracking/todo.md) | リポジトリ内 TODO コメントの調査状況 |
 | [fixme.md](./tracking/fixme.md) | リポジトリ内 FIXME コメントの調査状況（随時再スキャンして更新） |
