@@ -5,7 +5,7 @@
 [pr-trends.md](../contributing/pr-trends.md) の物差し（実在する問題か／根本原因を直すか／メンテナの作業とぶつからないか／メンテナの後押しがあるか）で選んだ、外部から着手できる候補。
 探し方と調査の注意は [investigation.md](./investigation.md) にまとめた。
 
-- 最終更新: 2026-11-06（「進行中」は 11-05 時点）
+- 最終更新: 2026-11-07（「進行中」は 11-05 時点）
 - 最後の定点観測: 2026-11-05（v5.7.0）。上位の候補より先にやるべき新しい問題は無かった。N8、N10、N11 は v5.7.0 でも残っている（コードで確認）
 - 基準コード: N1〜N17 の行番号は `upstream/main` 289d8a037（2026-10-16）。1〜13 の GitHub へのリンクは 7b36d08dd。GitHub を指すリンクは、手元の作業ブランチにまだ無いファイル
 - 運用: PR を出したら、候補の詳細は `compose/pr/pr-XXXX.md` に移す。片付いたものは [完了](#完了) に 1 行だけ残す（経緯は git の履歴にもある）
@@ -35,11 +35,12 @@
 | 順 | タスク | 種類 | 誰に効くか | 検証 | 規模 | 衝突 | 最初の一手 |
 | -: | ------ | ---- | ---------- | ---- | ---- | ---- | ---------- |
 | 1 | [S1 セキュリティに関わる発見](#s1-セキュリティに関わる発見) | セキュリティ | （非公開） | 実機（調査）+ コード | XS | — | security@docker.com に**非公開で**報告 |
-| 2 | [N8 plan engine で止めるコンテナに pre_stop が走らない](#n8-plan-engine-で止めるコンテナに-pre_stop-が走らない) | 退行（v5.2.0〜） | pre_stop の利用者 | 実機（調査。v5.1.4 と比較）+ コード | S | 高（plan engine） | issue |
+| 2 | [N8 plan engine で止めるコンテナに pre_stop が走らない](#n8-plan-engine-で止めるコンテナに-pre_stop-が走らない) | 退行（v5.2.0〜） | pre_stop の利用者 | **実機**（11-07。v5.1.4〜v5.4.0、v5.7.0、main で比較）+ コード | S | 高（plan engine。#14408 が open） | issue（案を作成済み） |
 | 3 | [N9 同じ依存先を必須と任意の両方から待つと任意側も起動されない](#n9-同じ依存先を必須と任意の両方から待つと任意側も起動されない) | 退行（v5.7.0） | 同じ依存先を `required: true` と `false` の両方から待つ構成 | 実機（調査） | S | 高（plan engine） | 保留（意図どおりの可能性。詳細を参照） |
 | 4 | [N10 `scale` も匿名ボリュームを引き継がない](#n10-scale-も匿名ボリュームを引き継がない) | データ消失系 | `scale` で依存先が作り直されるとき | 実機（調査）+ コード | XS | 低〜中 | #14357 に追記して相談 |
 | 5 | [N11 pre_stop のあるサービスで `restart` と `stop` が壊れる](#n11-pre_stop-のあるサービスで-restart-と-stop-が壊れる) | バグ | pre_stop の利用者 | 実機（調査）+ コード | XS | 低〜中 | issue → PR |
 | 6 | [13 `pkg/compose` のテストが Windows でコンパイルできない](#13-pkgcompose-のテストが-windows-でコンパイルできない)（＋ CI のチェック） | CI | メンテナ（毎回レビューで人が手当てしている） | テスト（修正の試作まで） | XS + S | 中 | issue（ndeloof の発言を引用）→ PR |
+| 7 | [N19 attached な `up` で 2 回目の Ctrl-C が効かない](#n19-attached-な-up-で-2-回目の-ctrl-c-が効かない)（Ctrl-C の後に遅れて起動したサービスが残る、も同じ根） | 固まる・黙って動き続ける | `up` を前景で使う全員 | 実機（main、v5.7.0、5.0.1）+ コード | S | 高（`up.go`） | 調査の T3e の後に issue（直し方はメンテナに任せる） |
 
 ### その次（余裕があるとき）
 
@@ -53,10 +54,11 @@
 | 12 | [N17 CI の基盤の小さな改善](#n17-ci-の基盤の小さな改善) | CI | XS ずつ | (a) は PR、(b) は issue |
 | 13 | [4 bake のテンプレート評価](#4-bake-のビルドが-curl-の書式指定などで失敗する) | バグ | S | issue |
 | 14 | [6 `TestWatchSyncIntoSymlinkedDirectory`](#6-e2e-testwatchsyncintosymlinkeddirectory-が不安定) | 不安定なテスト | S | PR |
-| 15 | [7 stats のテスト](#7-stats-のテストの決定化と取得失敗の-debug-ログ) | テスト | S | PR（レビューを引用） |
-| 16 | [10 classic build の `--push`](#10-classic-build-の---push-がプロジェクト全体をサービス数だけ-push-する) | バグ | S | issue |
-| 17 | [11 provider の ctx](#11-provider-のメタデータ取得が呼び出し元の-ctx-を使わない) | バグ（小） | S | PR（レビューを引用） |
-| 18 | [12 `config -q`](#12-config--q-が一覧系フラグと組み合わせると出力する) | バグ | S〜M | issue |
+| 15 | [N18 `TestUpAttachedTerminatesOnExternalStop`](#n18-e2e-testupattachedterminatesonexternalstop-が再起動の待ちの窓に外れて落ちる) | 不安定なテスト | XS | 発生の頻度を数えてから PR |
+| 16 | [7 stats のテスト](#7-stats-のテストの決定化と取得失敗の-debug-ログ) | テスト | S | PR（レビューを引用） |
+| 17 | [10 classic build の `--push`](#10-classic-build-の---push-がプロジェクト全体をサービス数だけ-push-する) | バグ | S | issue |
+| 18 | [11 provider の ctx](#11-provider-のメタデータ取得が呼び出し元の-ctx-を使わない) | バグ（小） | S | PR（レビューを引用） |
+| 19 | [12 `config -q`](#12-config--q-が一覧系フラグと組み合わせると出力する) | バグ | S〜M | issue |
 
 ### マージ済みの PR のフォローアップ
 
@@ -78,17 +80,28 @@
 
 ## 調査のタスク
 
-小さなタスクに分け、1 つずつやる（15〜30 分）。狙う場所と道具は [investigation.md](./investigation.md)。終わったものは [完了](#終わった調査のタスク) へ。
+小さなタスクに分け、上から順に 1 つずつやる（15〜30 分）。方針・バグの型・道具は [investigation.md](./investigation.md)。
+終わったものは [完了](#終わった調査のタスク) へ移し、investigation.md の「方法ごとの成果」を更新する。
+順は、効果と手間の釣り合い（安くて、メンテナの実績がある方法が先）。見つかった問題の深掘り（2〜3）は、新しい方向（4 以降）より先にやる。T9 は 1 回で終わらせず、毎週回す。
 
-| ID | 内容 | 完了の条件 |
-| -- | ---- | ---------- |
-| T3c | Ctrl-C の後もアプリが動き続ける: T3b で、起動のフェーズに Ctrl-C すると、終了コード 130 で返った後も api、db などが running のまま残った（負荷の高い並列で 24 回中 2 回）。Ctrl-C を、db が Started / Waiting になった時点に合わせて送り、v5.6.1 と v5.7.0 で比べる | 再現の頻度、退行かどうか、どこで止め損ねているか |
-| T3d | 作成中の Ctrl-C で `created` のコンテナが残る: T3b で、`up` が作成の完了を待たずに終わり、直後の `down` の後に残った（v5.7.0 は 40 回中 12 回、v5.6.1 は 0 回。次の `up` で片付く）。どのコミットで入ったか（#14305 など）を確かめる | 原因のコミットと場所、影響の大きさ |
-| T4 | plan engine の機能の棚卸し: v5.1.4（plan engine の前）の作成・起動・停止の経路にあった処理を、コードから一覧にする | 機能の一覧（T5 の材料） |
-| T5〜 | T4 の一覧の機能ごとに、v5.1.4 と v5.7.0 で同じシナリオを動かして比べる（1 機能 1 タスク） | 機能ごとの、違いの有無 |
-| T6 | `-race` でビルドした compose（main）で、e2e の up / down / start / watch を流す | 競合の報告の有無と場所 |
-| T7 | 遅延の注入: 中継ソケットを作り直し、`up` と `down` を 50〜100 ms の遅延で回す | 固まる、失敗する、API の呼び出しが増える、があるか |
-| T8 | 信頼できない入力: remote include（OCI / git）の取得と展開を、信頼されない側から見る | 境界を越えるものの有無。あれば非公開で報告し、詳細はこのファイルに書かない |
+| 順 | ID | 内容 | 完了の条件 | 方針 |
+| -: | -- | ---- | ---------- | ---- |
+| 1 | T9 | **main の CI の失敗を見る（毎週）**: 直近 1 週間の main と PR の失敗したジョブから、失敗したテストを集める（`ci-failures.py <開始日> <出力先>`）。flake ごとに、ログとテストのコードを読み、「製品の競合か、テストの問題か」に分ける。最後に回したのは 11-07（10-31〜11-06。flake は N18 の 1 件だけで、製品の競合の疑いは無し。他は基盤の失敗と、PR 自身の変更による失敗） | flake の一覧と、製品の競合の疑いがあるもの（あれば時間の窓の場所まで） | 方針 1、#14140 |
+| 2 | T3e | **N19 がいつから再発したか**: #11123（v2.22.0、2023-10 に close）の後のリリース版を取り、`double-sigint.py` で二分探索する（v2.23〜v5.0.1） | 最初に壊れた版と、その版でのシグナルの扱いの変更（コミット） | N19 |
+| 3 | T3d | 作成中の Ctrl-C で `created` のコンテナが残る: T3b で、`up` が作成の完了を待たずに終わり、直後の `down` の後に残った（v5.7.0 は 40 回中 12 回、v5.6.1 は 0 回。次の `up` で片付く）。どのコミットで入ったか（#14305 など）を確かめる | 原因のコミットと場所、影響の大きさ | 中断の後 |
+| 4 | T11 | **出力の異常を見る**: v5.7.0 で、`up`・`create`・`run`・`down` を、`--progress json` と `plain` で流す（成功、依存の失敗、ポートの衝突、フックの失敗）。同じ対象の行が 2 回、内部の名前（`service:web:1`）、終わりの表示の無い行を探す。#14465 で直ったものは除く。`--progress json` の経路（`cmd/compose/compose.go:747` の `display.JSON` と、`:127` のエラーの JSON 化）は CI で一度も通っていない（T10）ので、エラーで終わる場合の出力も見る | 異常の一覧と、それが出る条件 | 方針 5、#14465 |
+| 5 | T10c | **attached な `up` の最中に、全サービスを `restart` する**（T10b のやり残し。`zero-paths.sh <bin> <out> restart`）。全部のコンテナが一度 die するので、monitor が「全部終わった」と見なして `up` が終わらないか（`monitor.go:325` の `onContainerRestart` は 0%） | `up` が生きているか、ログが続くか、Ctrl-C の後の状態 | 方針 5 |
+| 6 | T12 | **時間の窓を grep で探す**: 「一覧を取る → イベントを購読する」「inspect → 操作する」「ディレクトリを作る → 中身を書く（存在で完了と見なす）」「出力を読み終える前に `Wait`」の形を、`pkg/`、`internal/`、`cmd/` から探す | 箇所の一覧（ファイル:行、窓の間に何が起きると壊れるか）。実機で試す価値のある上位 3 | 方針 2 |
+| 7 | T4 | **機能の表**: compose-spec の service の属性とトップレベル要素 × コマンド（`up`、`create`、`start`、`run`、`scale`、watch、`down`）の表を作り、どの経路でどの属性を扱うか、コードの場所を書く。v5.1.4（plan engine の前）の経路にあった副作用（イベント、フック、ラベル、警告）も並べる。大きいので、まず service の属性の半分まで | 表（T5〜 の材料）と、経路によって扱いが違う属性 | 方針 5、責務を移したときの抜けと二重 |
+| 8 | T5〜 | T4 の表の機能ごとに、v5.1.4 / v5.6.1 と v5.7.0 で同じシナリオを動かして比べる。終了コードと状態に加えて、出力も読む（1 機能 1 タスク。T4 で「経路によって扱いが違う」と分かった属性から） | 機能ごとの、違いと出力の異常の有無 | 方針 5 |
+| 9 | T13 | **中断の後の 2 回目**: `up`、`build`、`pull`、remote include（OCI / git）の取得を、途中で `kill -9` してから、同じコマンドをもう一度流す | 回復しない操作の一覧（残った途中状態と、その場所） | 中断の後、#14462 |
+| 10 | T14 | **設定の移行**: 動いているプロジェクトの設定を 1 つずつ変えて、`up` をもう一度流す（サービスの改名、profiles の付け外し、volume を external に、`network_mode` の変更、replicas の増減、provider への移行） | 古いリソースが残る、失敗する、作り直されない組み合わせ | 方針 6、#14264 |
+| 11 | T15 | **新しい使われ方**: (a) watch の最中に、多数のファイルを一度に書き換える（エージェントの編集の模擬）、(b) 同じプロジェクトを 2 つのプロセスから同時に操作する（`up -d` と `ps` / `logs -f`、同じ remote include の取得） | 固まる、壊れる、重複する、があるか | 方針 6、#14202 |
+| 12 | T6 | `-race` でビルドした compose（main）で、e2e の up / down / start / watch を流す（unit は #14321 から CI で `-race`。e2e は未対応） | 競合の報告の有無と場所 | 揺さぶり |
+| 13 | T16 | **静的解析を手がかりに使う**: 有効になっていない analyzer（`nilerr`、`contextcheck`、`bodyclose`、`noctx`、`errchkjson`、`exhaustive`、`gosec`）と `govulncheck` を手元で回す | 本物のバグに見えるもの（理由つき）。lint の修正だけの PR は出さない | 方針 5 |
+| 14 | T7 | 遅延の注入: 中継ソケットを作り直し、`up` と `down` を 50〜100 ms の遅延で回す | 固まる、失敗する、API の呼び出しが増える、があるか | 時間の窓 |
+| 15 | T17 | **メンテナが普段使わない環境（仮説の検証）**: ssh の Docker、古い API（`DOCKER_API_VERSION`）、classic builder（`DOCKER_BUILDKIT=0`）で、`up`・`ps`・`build`・`down` を流す。rootless は VM が要るので後回し | 失敗や挙動の違いの一覧と、仮説が当たったか | 方針 6 |
+| 16 | T8 | 信頼できない入力: remote include（OCI / git）の取得と展開を、信頼されない側から見る | 境界を越えるものの有無。あれば非公開で報告し、詳細はこのファイルに書かない | 方針 3 |
 
 ## 新機能の候補（2026-10-22）
 
@@ -223,7 +236,7 @@
 
 ### 終わった調査のタスク
 
-どれも 11-05。そこから引き出した教訓は [investigation.md](./investigation.md#調べるときの注意) に移した。
+T1〜T3b は 11-05、T10、T10b、T3c は 11-07。そこから引き出した教訓は [investigation.md](./investigation.md#調べるときの注意) に移した。
 
 | ID | 内容 | 結果 |
 | -- | ---- | ---- |
@@ -231,12 +244,15 @@
 | T2 | v5.6.1 で作った環境を v5.7.0 で操作する（アップグレード） | 作り直しは意図どおりの 2 種類だけ（#14293、#14402）。データの消失なし |
 | T3 | 前景の `up` の 12 シナリオを、並列 4 本 × 10 回 | 480 回で、固まる・終了コードの揺れ・リソースの残りは 0 件 |
 | T3b | 依存の鎖を詰め込んだ 1 プロジェクトの 5 シナリオを、並列 4 本 × 10 回（約 130 回で打ち切り） | 固まる回は 0 件。Ctrl-C で気になる結果が 2 つ → T3c、T3d |
+| T10 | main の CI（95bbca758）のカバレッジを関数ごとにし、0% の関数を一覧にする（`coverage-map.sh`） | 全体 71.8%、0% は 301 個（半分以上は dry-run の偽の API、TTY の表示、テストの補助）。利用者の経路の上位: `--progress json`（`compose.go:747`、`:127`）、`up` の 2 回目の Ctrl-C（`up.go:504`）、`run` の post_start（`run.go:93`）、`attach`、attached な `up` の最中の restart イベント（`monitor.go:325`）、`ps --status`、`push`、`config --profiles` / `--images` / `--environment`、watch の `.dockerignore`、変更系の `--dry-run`。新しい候補は無し |
+| T10b | T10 の 0% の経路のうち 3 つを実機で通す（`zero-paths.sh`、`double-sigint.py`） | 2 回目の Ctrl-C が効かない → N19（main、v5.7.0、5.0.1 で再現）。`ps --status` は 7 状態すべて正しい。1 サービスの `restart` で attached な `up` は生きたまま。全サービスの `restart` はスクリプトの誤りで未確認 |
+| T3c | 起動のフェーズの Ctrl-C を出力の行に合わせて送り、running が残る回と graceful な停止の有無を並べる（`sigint-once.py`、v5.7.0 と main を 30 回ずつ） | 残ったのは v5.7.0 で 17/30、main で 14/30。graceful な停止は 60 回すべて走った。停止の後に依存の待ちが明けて起動したサービスが残る。023544aae の `stopLateStarters` は、1 回目の Ctrl-C で取り消される `globalCtx` の monitor の上にあるので働かない → N19 と同じ根として N19 にまとめた |
 
 ---
 
 ## 候補の詳細
 
-番号の N1〜N17 は 10-20 の第 3 回の調査、1〜13 はそれより前の調査で付けたもの（片付いた番号は欠番）。PR を出したら、詳細は `compose/pr/` に移す。
+番号の N1〜N17 は 10-20 の第 3 回の調査、N18 以降は 11-07 からの調査のタスク、1〜13 はそれより前の調査で付けたもの（片付いた番号は欠番）。PR を出したら、詳細は `compose/pr/` に移す。
 
 ### N6. 許可リスト型の dockerignore で watch が無視のルールを全部捨てる
 
@@ -250,19 +266,25 @@
 
 ### N8. plan engine で止めるコンテナに pre_stop が走らない
 
-- **種類**: 退行（v5.2.0 から。v5.7.0 も同じ）。
+- **種類**: 退行（v5.2.0 から。v5.7.0 と main 95bbca758 も同じ）。
 
-  | 場面 | v5.1.4 | v5.2.0 以降 |
-  | ---- | ------ | ----------- |
-  | scale down（`up --scale`、`scale`） | 走る | 走らない |
-  | `restart: true` の依存元を止めるとき | 走る | 走らない |
-  | ネットワークの作り直し | 走る | 走らない（v5.4.0 から） |
-  | 作り直し（recreate）そのもの | 走らない | 走らない（退行ではない） |
+  11-07 に自分で実機で確かめた（pre_stop がバインドマウントのファイルに 1 行書き、その行数を数える。道具は `prestop-repro.sh`）。
 
-- **原因（自分でも確認）**: plan の `OpStopContainer` を実行する `executor_ops.go:309-314` の `execStopContainer` が、`ContainerStop` を呼ぶだけで pre_stop を実行しない。古い経路（`down.go` の `stopContainer`）は実行している。
+  | 場面 | v5.1.4 | v5.2.0 / v5.3.0 | v5.4.0 / v5.7.0 / main |
+  | ---- | ------ | --------------- | ---------------------- |
+  | scale down（`up --scale`、`scale`） | 走る | 走らない | 走らない |
+  | `restart: true` の依存元を止めるとき | 走る | 走らない | 走らない |
+  | ネットワークの作り直し | 走る | 走る | 走らない |
+  | 作り直し（recreate）そのもの | 走らない | 走らない | 走らない（退行ではない） |
+  | `stop`（対照） | 走る | 走る | 走る |
+
+- **原因（自分でも確認）**: plan の `OpStopContainer` を実行する `execStopContainer`（main の `executor_ops.go:319-324`）が、`ContainerStop` を呼ぶだけで pre_stop を実行しない。古い経路（`down.go` の `stopContainer`）は実行している。`OpStopContainer` は、ndeloof の #13830（Reconciliation plan、v5.2.0）で入った。
+- **仕様**: compose-go の schema は pre_stop を「Commands to run before the container stops. If any command fails, the container stop is aborted.」と説明している。
 - **直し方（調査の試作）**: 実行中のコンテナなら、サービスの PreStop を走らせる（約 12 行）。
-  ただし、作り直しでも pre_stop が走るようになる（v5.1.4 にも無かった新しい挙動）ので、入れるかは設計判断。
-- **既存**: 無し。
+  ただし、作り直しでも pre_stop が走るようになる（v5.1.4 にも無かった新しい挙動）。フックが失敗したときに止めるのをやめるかも、plan の中では設計判断になる。
+- **既存**: 無し（11-07 に issue / PR を検索）。近いものに #12476（`-p` だけだと compose ファイルを読まないのでフックが走らない。仕様としてクローズ）。
+- **再現の注意**: `-p` だけで実行すると、`stop` などは compose ファイルを読まず、フックの定義が無くなる。必ず `-f compose.yaml -p` で試す（最初はこれで対照の `stop` まで 0 回になった）。
+- **衝突**: 高。ndeloof の #14408（plan の型を `internal/planning` に移す、open）が `executor_ops.go` を触る。直し方は ndeloof に任せる。
 - **最初の一手**: issue で、退行であること（上の表）と、作り直しでも走らせるかを聞く。
 
 ### N9. 同じ依存先を必須と任意の両方から待つと任意側も起動されない
@@ -339,12 +361,40 @@
 
 8 週間分（857 run、536 ジョブ）の集計から:
 
-- (a) Dockerfile の `go mod download` に再試行を入れる（XS）。proxy.golang.org の HTTP/2 エラーで、週に約 2 回の手動の再実行が出ている。
+- (a) Dockerfile の `go mod download` に再試行を入れる（XS）。proxy.golang.org の HTTP/2 エラーで、週に約 2 回の手動の再実行が出ている（11-07 の T9 でも 10-31〜11-06 に 2 回。main の merge と PR の binary のビルド）。
 - (b) **main の Codecov へのアップロードが、2026-01-22 から毎回失敗している**（[run 38929564017](https://github.com/docker/compose/actions/runs/38929564017) に「Token required because branch is protected」。ジョブは green なので誰も気付いていない）。
   Codecov 上の main は 01-21 のまま 53%、実際は約 71%。直すには token か OIDC の設定（メンテナの作業）が要るので、issue で知らせる。`pkg/mocks` を ignore に足す提案も一緒に。
 - (c) standalone の e2e で、`GOCOVERDIR` の警告が毎回 stderr に出る（失敗メッセージの 1 行目がこの警告になる）。XS〜S。
 - (d) main の push の 22% が、次の push で cancel されて CI の結果を持たない（`cancel-in-progress: true`）。PR だけ cancel する案（XS。方針なので聞く）。
 - (e) unit テストが root で動くので、権限のテスト 2 本（`TestSync_StatPermissionError`、`TestWatchRecursivelySkipsUnreadableDir`）が常に skip されている。
+
+### N18. e2e `TestUpAttachedTerminatesOnExternalStop` が再起動の待ちの窓に外れて落ちる
+
+- **種類**: 不安定なテスト（テストの問題。製品の競合ではない）。11-07 の T9 で見つけた。
+- **症状**: `container restarted again before the external stop could land in its backoff window; rerun` で落ち、再実行で通る（PR の [run 42263985547](https://github.com/docker/compose/actions/runs/42263985547) の attempt 1、e2e (standalone, stable, containerd)）。10-31〜11-06 で 1 回。
+- **原因（コードと CI のログ）**: `pkg/e2e/up_test.go:182-225`（upstream/main 95bbca758）。fixture は `restart: unless-stopped` + `exit 1` で、Docker の再起動の待ちは 100 ms から倍になる。
+  - テストは 250 ms ごとに inspect し、`Restarting=true` を見た直後にもう一度 inspect して、`RestartCount` が変わっていないことを `assert` している。`RestartCount` が小さいうちは待ちが 200〜400 ms しかないので、負荷の高い CI では外れる。
+  - コメントに「narrow (can't fully close) the race」とあるとおり、作者（glours、22d170f80）も分かっていて、外れたら「rerun」と書いている。前提が崩れたときに、skip ではなく失敗にしている。
+  - 逆に、前提の確認を通った後も、`compose stop` が届くまでに数百 ms かかるので、待ちが終わってから stop が届くこともある。そのときテストは通るが、#13985 の経路（待ちの間の stop）を通っていない。
+- **直し方（案）**: `RestartCount` が 4 以上（待ち 1.6 秒以上）になるまで待ってから stop する。前提の確認は `assert` でなく `t.Skip` にする。XS。
+- **最初の一手**: 過去 8 週の CI で何回落ちたかを `ci-failures.py` で数え、数字を付けて PR（テストだけの変更なので issue は要らない見込みだが、[pr-trends.md の §8](../contributing/pr-trends.md#8-contributing--ai_policy-のルール外部コントリビューター向けの要点) で確かめる）。
+
+### N19. attached な up で 2 回目の Ctrl-C が効かない
+
+- **種類**: 固まる（退行ではない。5.0.1 でも同じ）。11-07 の T10b で見つけた（T10 で `killApplication` が 0% だった）。T3c（Ctrl-C の後にコンテナが残る）も同じ根だった。
+- **症状**: 前景の `up` で Ctrl-C を押すと「Gracefully Stopping... press Ctrl+C again to force」と出るが、2 回目の Ctrl-C を押しても何も起きない。SIGTERM で止まらないコンテナがあると、`stop_grace_period` が切れるまで `up` が返らない。
+- **症状 2（T3c、実機）**: 起動のフェーズで Ctrl-C を 1 回押すと、`up` は 130 で返るのに、依存の待ちが明けて遅れて起動したサービスが running のまま残る。
+  - T3b の鎖のプロジェクトで、SIGINT を出力の行（`db-1 Started`、`Waiting`、`api-1 Started`）に合わせて送ると、v5.7.0 で 30 回中 17 回（最大 8 サービス）、main（95bbca758）で 30 回中 14 回（毎回 1 サービス）残った。60 回すべてで「Gracefully Stopping」は出ている。
+  - ログの順（main の 1 回）: `worker-1 Stopped`（起動前なので何も起きない）→ `api-1 Healthy` → `worker-1 Starting`。Ctrl-C の後は monitor の debug の行が 1 行も出ない。
+  - これを拾うための `stopLateStarters`（ndeloof の 023544aae、v5.6.0。本文に「Ctrl+C can land … while s.start() (its own uncancelable context) is still climbing the dependency graph」「The only recovery today is a second manual Ctrl+C」）は monitor の listener で、monitor は `globalCtx` で動く（`up.go:320`、`:352`）。その `globalCtx` が 1 回目の Ctrl-C で取り消されるので、遅れて起動したサービスを拾えない。回復の手段とされた 2 回目の Ctrl-C も、上の症状で効かない。
+- **再現（実機）**: `stubborn`（`trap "" TERM`、`stop_grace_period: 60s`、`init: true`）と `normal` の 2 サービスで `up`。SIGINT → 3 秒後に SIGINT。20 秒たっても `up` は生きていて、`stubborn` は running のまま。main（95bbca758）3/3、v5.7.0 3/3、5.0.1 3/3（`zero-paths.sh ... ctrlc` と、シェルを通さない `double-sigint.py` の両方で確認）。
+- **原因（コード。仮説）**: 1 回目の SIGINT は、`up` の `signalChan`（`pkg/compose/up.go:243-244`）と `AdaptCmd` の受け口（`cmd/compose/compose.go:109-118`）の両方に届く。`AdaptCmd` は `ctx` を取り消すので、その子の `globalCtx`（`up.go:267`）も取り消され、`runEventLoop` は `case <-u.globalCtx.Done(): return nil`（`up.go:465`）でループを抜ける。2 回目の SIGINT は `signalChan` に溜まるだけで誰も読まず、`killApplication`（`up.go:504`）に届かない。
+  - 症状 2 も同じ根: 取り消された `globalCtx` で monitor が止まり、`stopLateStarters` が働かない。一方 `runStart` は `context.WithoutCancel(ctx)`（`up.go:378`）で起動を続ける。
+  - `select` が先に `globalCtx.Done()` を選び、graceful な停止すら走らない道もありうるが、T3c の 60 回では一度も起きなかった。
+  - 「次点」の「Ctrl-C を 1 回送っただけで、まれに即座に kill される」も、同じ 2 か所の受け口が根にある。
+- **既存**: #11123（2023-10、v2.22.0 で同じ症状。close 済み）。今回の形は、その後の書き換えで再発したものと見られる（いつからかは未確認）。
+- **影響**: 前景で `up` を使う全員。Ctrl-C で止めたつもりのアプリが、黙って動き続ける（終了コードは 130 で、表示も「Stopped」が並ぶので気付きにくい）。
+- **最初の一手**: 調査のタスクの T3e（いつからか）を済ませてから、2 つの症状を 1 つの issue にまとめ、再現手順と、2 か所の受け口、`up.go:465`、023544aae の意図が Ctrl-C では働いていないことを書く。`up.go` は plan engine の中なので、直し方は ndeloof に任せる。
 
 ### 4. bake のビルドが curl の書式指定などで失敗する
 
